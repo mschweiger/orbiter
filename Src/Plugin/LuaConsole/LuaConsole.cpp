@@ -6,7 +6,6 @@
 #include "LuaConsole.h"
 #include "ConsoleCfg.h"
 #include "resource.h"
-#include <process.h>
 #include <set>
 
 using std::min;
@@ -27,7 +26,6 @@ char cConsoleCmd[1024] = "\0";
 LuaConsole::LuaConsole (HINSTANCE hDLL): Module (hDLL)
 {
 	hWnd = NULL;
-	hThread = NULL;
 	interp = NULL;
 	bRefresh = false;
 	fW = 0;
@@ -115,16 +113,11 @@ void LuaConsole::clbkSimulationEnd ()
 {
 	// Kill the interpreter thread
 	if (interp) {
-		if (hThread) {
-			termInterp = true;
+		termInterp = true;
+		if (hThread.joinable()) {
 			interp->Terminate();
-			interp->EndExec(); // give the thread opportunity to close
-			if (WaitForSingleObject (hThread, 1000) != 0) {
-				oapiWriteLog ((char*)"LuaConsole: timeout while waiting for interpreter thread");
-				TerminateThread (hThread, 0);
-			}
-			CloseHandle (hThread);
-			hThread = NULL;
+			interp->StepInterpreter(); // give the thread opportunity to close
+			hThread.join();
 		}
 		delete interp;
 		interp = NULL;
@@ -140,9 +133,7 @@ void LuaConsole::clbkPreStep (double simt, double simdt, double mjd)
 {
 	if (interp) {
 		if (interp->IsBusy() || cConsoleCmd[0] || interp->nJobs()) { // let the interpreter do some work
-			interp->EndExec();        // orbiter hands over control
-			// At this point the interpreter is performing one cycle
-			interp->WaitExec();   // orbiter waits to get back control
+			interp->StepInterpreter();
 		}
 		if (bRefresh) {
 			UpdateScrollbar();
@@ -630,31 +621,28 @@ DLLCLBK void ExitModule (HINSTANCE hDLL)
 
 Interpreter *LuaConsole::CreateInterpreter ()
 {
-	unsigned int id;
 	termInterp = false;
 	interp = new ConsoleInterpreter (this);
 	interp->Initialise();
-	hThread = (HANDLE)_beginthreadex (NULL, 4096, &InterpreterThreadProc, this, 0, &id);
+	hThread = std::thread(InterpreterThreadProc, this);
 	return interp;
 }
 // Interpreter thread function
-unsigned int WINAPI LuaConsole::InterpreterThreadProc (LPVOID context)
+unsigned int LuaConsole::InterpreterThreadProc (LuaConsole* console)
 {
 	int res;
-	LuaConsole *console = (LuaConsole*)context;
 	ConsoleInterpreter *interp = (ConsoleInterpreter*)console->interp;
 
 	// interpreter loop
 	for (;;) {
-		interp->WaitExec(); // wait for execution permission
+		interp->WaitForStep(); // wait for execution permission
 		if (console->termInterp) break; // close thread requested
 		res = interp->RunChunk (cConsoleCmd, strlen (cConsoleCmd)); // run command from buffer
 		if (interp->Status() == 1) break; // close thread requested
 		cConsoleCmd[0] = '\0';    // free buffer
 		console->bRefresh = (res != -1); // signal terminal refresh
-		interp->EndExec();        // return control
+		interp->StepDone();        // return control
 	}
-	interp->EndExec();  // release mutex (is this necessary?)
-	_endthreadex(0);
+	interp->StepDone();  // wake the main thread when we die
 	return 0;
 }

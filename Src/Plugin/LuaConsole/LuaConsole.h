@@ -7,6 +7,7 @@
 #include "OrbiterAPI.h"
 #include "ModuleAPI.h"
 #include "ConsoleInterpreter.h"
+#include <thread>
 
 #define NLINE 100 // number of buffered lines
 
@@ -42,14 +43,14 @@ protected:
 private:
 	static INT_PTR CALLBACK DlgProc (HWND, UINT, WPARAM, LPARAM);
 	static LRESULT WINAPI TermProcHook (HWND, UINT, WPARAM, LPARAM);
-	static unsigned int WINAPI InterpreterThreadProc (LPVOID context);
+	static unsigned int InterpreterThreadProc (LuaConsole* console);
 	static void OpenDlgClbk (void *context); // called when user requests console window
 	Interpreter *CreateInterpreter ();
 	void AddLine (const char *str, int mode=1); // add line to buffer
 	void Clear ();
 	void InputLine (const char *str); // user input
 	bool ScanHistory (int step); // recall previous command to input buffer
-	HANDLE hThread;    // interpreter thread handle
+	std::thread hThread;    // interpreter thread handle
 	bool termInterp;
 
 	Interpreter *interp; // interpreter instance

@@ -46,13 +46,11 @@ VECTOR3 lua_tovector (lua_State *L, int idx)
 // ============================================================================
 // class Interpreter
 
-Interpreter::Interpreter ()
+Interpreter::Interpreter () : sem_exec(0), sem_wait(0)
 {
 	L = luaL_newstate();  // create new Lua context
 	is_busy = false;      // waiting for input
 	is_term = false;      // no attached terminal by default
-	bExecLocal = false;   // flag for locally created mutexes
-	bWaitLocal = false;
 	jobs = 0;             // background jobs
 	status = 0;           // normal
 	term_verbose = 0;     // verbosity level
@@ -61,17 +59,11 @@ Interpreter::Interpreter ()
 	// store interpreter context in the registry
 	lua_pushlightuserdata (L, this);
 	lua_setfield (L, LUA_REGISTRYINDEX, "interp");
-
-	hExecMutex = CreateMutex (NULL, TRUE, NULL);
-	hWaitMutex = CreateMutex (NULL, FALSE, NULL);
 }
 
 Interpreter::~Interpreter ()
 {
 	lua_close (L);
-
-	if (hExecMutex) CloseHandle (hExecMutex);
-	if (hWaitMutex) CloseHandle (hWaitMutex);
 }
 
 void Interpreter::Initialise ()
@@ -99,6 +91,7 @@ bool Interpreter::IsBusy () const
 void Interpreter::Terminate ()
 {
 	status = 1;
+	sem_exec.release();
 }
 
 void Interpreter::PostStep (double simt, double simdt, double mjd)
@@ -555,19 +548,19 @@ void Interpreter::lua_pushsketchpad (lua_State *L, oapi::Sketchpad *skp)
 #endif
 }
 
-void Interpreter::WaitExec (DWORD timeout)
+void Interpreter::StepInterpreter ()
 {
-	// Called by orbiter thread or interpreter thread to wait its turn
-	// Orbiter waits for the script for 1 second to return
-	WaitForSingleObject (hWaitMutex, timeout); // wait for synchronisation mutex
-	WaitForSingleObject (hExecMutex, timeout); // wait for execution mutex
-	ReleaseMutex (hWaitMutex);              // release synchronisation mutex
+	sem_exec.release();
+	sem_wait.acquire();
 }
 
-void Interpreter::EndExec ()
+void Interpreter::WaitForStep ()
 {
-	// called by orbiter thread or interpreter thread to hand over control
-	ReleaseMutex (hExecMutex);
+	sem_exec.acquire();
+}
+void Interpreter::StepDone()
+{
+	sem_wait.release();
 }
 
 void Interpreter::frameskip (lua_State *L)
@@ -576,17 +569,10 @@ void Interpreter::frameskip (lua_State *L)
 		lua_pushboolean(L, 1);
 		lua_setfield (L, LUA_GLOBALSINDEX, "wait_exit");
 	} else {
-		EndExec();
-		WaitExec();
+		StepDone();
+		// yield to the orbiter thread
+		WaitForStep();
 	}
-}
-
-int Interpreter::ProcessChunk (const char *chunk, int n)
-{
-	WaitExec();
-	int res = RunChunk (chunk, n);
-	EndExec();
-	return res;
 }
 
 int Interpreter::RunChunk (const char *chunk, int n)
@@ -1984,9 +1970,9 @@ int Interpreter::oapiWriteLog(lua_State* L)
 
 int Interpreter::oapiExit(lua_State* L)
 {
-	auto code = lua_tointeger(L, 1);
-	exit(code);
-	return 0; // compiler warnings
+	Interpreter* interp = GetInterpreter(L);
+	interp->exitCode = (int)lua_tointeger(L, 1);;
+	return 0;
 }
 
 static bool bInputClosed;
