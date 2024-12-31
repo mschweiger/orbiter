@@ -4,7 +4,7 @@
 #include "MenuInfoBar.h"
 #include "Pane.h"
 #include "Camera.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Dialogs.h"
 #include "DlgMgr.h"
 #include "DlgMenuCfg.h"

@@ -5,7 +5,7 @@
 #define __ELEVMGR_H
 
 #include "windows.h"
-#include "vecmat.h"
+#include "Vecmat.h"
 #include "ZTreeMgr.h"
 #include <vector>
 

@@ -5,7 +5,7 @@
 #include "DlgMgr.h"
 #include "OrbiterAPI.h"
 #include "Orbiter.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Log.h"
 
 #define DLG_CAPTIONBUTTON (DLG_CAPTIONCLOSE|DLG_CAPTIONHELP)

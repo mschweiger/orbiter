@@ -8,7 +8,7 @@
 
 #include "VectorMap.h"
 #include "Psys.h"
-#include "MFD.h"
+#include "Mfd.h"
 #include "Util.h"
 
 #define OUTLINE_COAST 1

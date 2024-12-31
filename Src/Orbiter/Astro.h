@@ -8,7 +8,7 @@
 #define __ASTRO_H
 
 #include <time.h>
-#include "vecmat.h"
+#include "Vecmat.h"
 #include "OrbiterAPI.h"
 
 const double iAU = 1.0/AU;

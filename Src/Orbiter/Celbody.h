@@ -9,7 +9,7 @@
 #ifndef __CELBODY_H
 #define __CELBODY_H
 
-#include "RigidBody.h"
+#include "Rigidbody.h"
 #include "OrbiterAPI.h"
 #include "PinesGrav.h"
 

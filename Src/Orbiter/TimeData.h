@@ -1,6 +1,7 @@
 #ifndef TIMEDATA_H
 #define TIMEDATA_H
 
+#include <cstddef>
 //-----------------------------------------------------------------------------
 // Name: class TimeData
 // Desc: stores timing information for current time step

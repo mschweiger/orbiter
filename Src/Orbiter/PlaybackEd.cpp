@@ -5,7 +5,7 @@
 #include "DlgMgr.h" // remove
 #include "Camera.h"
 #include "Log.h"
-#include "Resource.h"
+#include "resource.h"
 
 using namespace std;
 

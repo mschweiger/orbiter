@@ -9,7 +9,7 @@
 #ifndef __TABSCENARIO_H
 #define __TABSCENARIO_H
 
-#include <CommCtrl.h>
+#include <commctrl.h>
 #include "LpadTab.h"
 #include "CustomControls.h"
 #include <filesystem>

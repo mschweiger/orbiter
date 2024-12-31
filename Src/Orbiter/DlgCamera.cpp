@@ -9,12 +9,12 @@
 
 #include "DlgCamera.h"
 #include "DlgMgr.h"
-#include "Resource.h"
-#include "Resource2.h"
+#include "resource.h"
+#include "resource2.h"
 #include "Orbiter.h"
 #include "Psys.h"
 #include "Camera.h"
-#include "Uxtheme.h"
+#include <uxtheme.h>
 #include "DlgCtrl.h"
 
 using std::min;

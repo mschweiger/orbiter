@@ -16,7 +16,7 @@
 #include "Camera.h"
 #include "DlgCtrl.h"
 #include "resource.h"
-#include "Uxtheme.h"
+#include <uxtheme.h>
 #include <commctrl.h>
 
 extern Orbiter* g_pOrbiter;

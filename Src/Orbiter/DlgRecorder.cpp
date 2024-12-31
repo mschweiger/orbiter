@@ -9,8 +9,8 @@
 
 #include "DlgRecorder.h"
 #include "Orbiter.h"
-#include "Resource.h"
-#include "Resource2.h"
+#include "resource.h"
+#include "resource2.h"
 
 extern Orbiter *g_pOrbiter;
 extern Vessel *g_focusobj;

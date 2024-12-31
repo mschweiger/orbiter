@@ -10,6 +10,7 @@
 #define __CONFIG_CPP
 #define STRICT 1
 
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <string.h>

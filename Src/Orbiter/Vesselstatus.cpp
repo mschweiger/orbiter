@@ -8,8 +8,8 @@
 
 #include "Orbiter.h"
 #include "Vessel.h"
-#include "Supervessel.h"
-#include "VVessel.h"
+#include "SuperVessel.h"
+#include "Vvessel.h"
 #include "Config.h"
 #include "Pane.h"
 #include "Element.h"

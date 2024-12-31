@@ -8,8 +8,9 @@
 #ifndef __DLGCAMERA_H
 #define __DLGCAMERA_H
 
+#include <windows.h>
+#include <commctrl.h>
 #include "DialogWin.h"
-#include "CommCtrl.h"
 #include "Celbody.h"
 #include "Camera.h"
 

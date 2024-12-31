@@ -10,8 +10,8 @@
 #include <windows.h>
 #include "DlgCapture.h"
 #include "Orbiter.h"
-#include "Resource.h"
-#include "Resource2.h"
+#include "resource.h"
+#include "resource2.h"
 #include <string>
 
 extern Orbiter *g_pOrbiter;

@@ -8,8 +8,10 @@
 #ifndef __DLGFOCUS_H
 #define __DLGFOCUS_H
 
+#include <windows.h>
+#include <commctrl.h>
+
 #include "DialogWin.h"
-#include "CommCtrl.h"
 
 class DlgFocus: public DialogWin {
 public:

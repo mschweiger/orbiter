@@ -13,7 +13,7 @@
 #include "Psys.h"
 #include "Camera.h"
 #include "resource.h"
-#include "Uxtheme.h"
+#include <uxtheme.h>
 
 using std::min;
 using std::max;

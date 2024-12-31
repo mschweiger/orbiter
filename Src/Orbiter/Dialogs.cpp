@@ -15,7 +15,7 @@
 #include "Camera.h"
 #include "Pane.h"
 #include "Nav.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Dialogs.h"
 #include "DlgMgr.h" // to be removed
 

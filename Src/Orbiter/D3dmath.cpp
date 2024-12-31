@@ -15,7 +15,7 @@
 #define STRICT
 #include <math.h>
 #include <stdio.h>
-#include "D3DMath.h"
+#include "D3dmath.h"
 
 VOID VMAT_rotx (D3DMATRIX &a, double r)
 {

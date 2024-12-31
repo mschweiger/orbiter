@@ -11,6 +11,8 @@
 #include "TabModule.h"
 #include "resource.h"
 #include <filesystem>
+#include <algorithm>
+
 namespace fs = std::filesystem;
 
 using std::max;

@@ -10,7 +10,7 @@
 #include "DlgHelp.h"
 #include "DlgMgr.h"
 #include "Orbiter.h"
-#include "Resource.h"
+#include "resource.h"
 #include <htmlhelp.h>
 #include <io.h>
 

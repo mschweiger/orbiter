@@ -7,9 +7,9 @@
 #include <io.h>
 #include <time.h>
 #include <fstream>
-#include "Uxtheme.h"
+#include <uxtheme.h>
 #include <commctrl.h>
-#include "Resource.h"
+#include "resource.h"
 #include "Orbiter.h"
 #include "Launchpad.h"
 #include "TabScenario.h"

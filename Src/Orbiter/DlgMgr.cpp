@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "GraphicsAPI.h"
 #include "DlgMgr.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Orbiter.h"
 #include "Log.h"
 

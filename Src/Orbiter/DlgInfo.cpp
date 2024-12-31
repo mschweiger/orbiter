@@ -12,7 +12,7 @@
 #include <windows.h>
 #include "DlgInfo.h"
 #include "Dialogs.h"
-#include "Resource.h"
+#include "resource.h"
 #include "DlgMgr.h" // to be removed
 #include "Orbiter.h"
 #include "Vessel.h"
@@ -21,7 +21,7 @@
 #include "Celbody.h"
 #include <windows.h>
 #include <commctrl.h>
-#include <Richedit.h>
+#include <richedit.h>
 #include "Element.h"
 
 extern Orbiter *g_pOrbiter;

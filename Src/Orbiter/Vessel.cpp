@@ -22,7 +22,7 @@
 
 #include "Orbiter.h"
 #include "Vessel.h"
-#include "Supervessel.h"
+#include "SuperVessel.h"
 #include "Config.h"
 #include "Camera.h"
 #include "Pane.h"
@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <algorithm>
 
 #ifdef INLINEGRAPHICS
 #include "VVessel.h"

@@ -8,14 +8,14 @@
 #define STRICT 1
 
 #include "DlgFocus.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Orbiter.h"
 #include "Psys.h"
 #include "SuperVessel.h"
 #include "Pane.h"
 #include "Camera.h"
 #include "Util.h"
-#include "Uxtheme.h"
+#include <uxtheme.h>
 #include <iomanip>
 
 extern Orbiter *g_pOrbiter;

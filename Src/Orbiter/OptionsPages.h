@@ -14,7 +14,7 @@
 #define __OPTIONSPAGES_H
 
 #include <windows.h>
-#include <CommCtrl.h>
+#include <commctrl.h>
 #include "CustomControls.h"
 #include "OrbiterAPI.h"
 

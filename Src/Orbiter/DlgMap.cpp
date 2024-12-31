@@ -13,7 +13,7 @@
 #include "Orbiter.h"
 #include "Psys.h"
 #include "Planet.h"
-#include "Resource.h"
+#include "resource.h"
 #include "DlgMgr.h" // to be removed
 #include "Pane.h"
 #include "Util.h"
