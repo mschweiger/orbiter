@@ -9,6 +9,9 @@
 
 #include "DialogWin.h"
 #include "Orbiter.h"
+#include <list>
+#include "imgui.h"
+class DialogImGui;
 
 class oapi::GraphicsClient;
 extern Orbiter *g_pOrbiter;
@@ -29,7 +32,7 @@ public:
 	// Make sure that a dialog of type DlgType is open and return a pointer to it.
 	// This opens the dialog if not yet present.
 	// Use this function for dialogs that should only have a single instance
-	template<typename DlgType>
+	template<typename DlgType, std::enable_if_t<std::is_base_of_v<DialogWin, DlgType>, bool> = true>
 	DlgType *EnsureEntry (HINSTANCE hInst = 0, void *context = 0)
 	{
 		if (!hInst) hInst = g_pOrbiter->GetInstance();
@@ -41,7 +44,7 @@ public:
 	// Create a new instance of dialog type DlgType and return a pointer to it.
 	// This opens a new dialog, even if one of this type was open already.
 	// Use this function for dialogs that can have multiple instances.
-	template<typename DlgType>
+	template<typename DlgType, std::enable_if_t<std::is_base_of_v<DialogWin, DlgType>, bool> = true>
 	DlgType *MakeEntry (HINSTANCE hInst = 0, void *context = 0)
 	{
 		if (!hInst) hInst = g_pOrbiter->GetInstance();
@@ -53,7 +56,7 @@ public:
 
 	// Returns a pointer to the first instance of dialog type DlgType,
 	// or 0 if no instance exists.
-	template<typename DlgType>
+	template<typename DlgType, std::enable_if_t<std::is_base_of_v<DialogWin, DlgType>, bool> = true>
 	DlgType *EntryExists (HINSTANCE hInst)
 	{
 		DIALOGENTRY *tmp = firstEntry;
@@ -149,6 +152,77 @@ private:
 	// End tread management
 	// ====================================================================
 
+
+	// ====================================================================
+	// ImGui management
+	// ====================================================================
+	std::list<DialogImGui*> DlgImGuiList;
+public:
+	// Make sure that a dialog of type DlgType is open and return a pointer to it.
+	// This opens the dialog if not yet present.
+	// Use this function for dialogs that should only have a single instance
+	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	T* EnsureEntry()
+	{
+		T* dlg = EntryExists<T>();
+		if(!dlg)
+			dlg = MakeEntry<T>();
+		if(dlg)
+			dlg->Activate();
+		return dlg;
+	}
+
+	// Create a new instance of dialog type DlgType and return a pointer to it.
+	// This opens a new dialog, even if one of this type was open already.
+	// Use this function for dialogs that can have multiple instances.
+	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	T* MakeEntry()
+	{
+		T* pDlg = new T();
+		AddEntry(pDlg);
+		return pDlg;
+	}
+
+	// Returns a pointer to the first instance of dialog type DlgType,
+	// or 0 if no instance exists.
+	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	T* EntryExists()
+	{
+		for (auto& e : DlgImGuiList) {
+			T *dlg = dynamic_cast<T *>(e);
+			if(dlg) return dlg;
+		}
+		return nullptr;
+	}
+
+	void AddEntry(DialogImGui* dlg)
+	{
+		for (auto& e : DlgImGuiList) {
+			if (e == dlg) {
+				return;
+			}
+		}
+		DlgImGuiList.push_back(dlg);
+	}
+
+	bool DelEntry(DialogImGui* dlg)
+	{
+		for (auto it = DlgImGuiList.begin(); it != DlgImGuiList.end(); ) {
+			if (*it == dlg) {
+				it = DlgImGuiList.erase(it);
+				return true;
+			}
+			else {
+				++it;
+			}
+		}
+		return false;
+	}
+
+	void ImGuiNewFrame();
+private:
+	void InitImGui();
+	void ShutdownImGui();
 };
 
 INT_PTR OrbiterDefDialogProc (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);

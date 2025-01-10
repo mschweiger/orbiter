@@ -43,11 +43,15 @@
 #include "DlgCtrl.h"
 #include "GraphicsAPI.h"
 #include "ConsoleManager.h"
+#include "imgui.h"
+#include "imgui_impl_win32.h"
 #include <filesystem>
 namespace fs = std::filesystem;
 
 using namespace std;
 using namespace oapi;
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 #define OUTPUT_DBG
 #define LOADSTATUSCOL 0xC08080 //0xFFD0D0
@@ -972,8 +976,10 @@ void Orbiter::BroadcastGlobalInit ()
 HRESULT Orbiter::Render3DEnvironment ()
 {
 	if (gclient) {
+		pDlgMgr->ImGuiNewFrame();
 		gclient->clbkRenderScene ();
 		Output2DData ();
+		gclient->clbkImGuiRenderDrawData();
 		gclient->clbkDisplayFrame ();
 	}
     return S_OK;
@@ -2555,6 +2561,9 @@ void Orbiter::BroadcastBufferedKeyboardEvent (char *kstate, DIDEVICEOBJECTDATA *
 
 LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+		return true;
+
 	WORD kmod;
 
 	switch (uMsg) {
@@ -2564,6 +2573,10 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		return 0;
 
 	case WM_CHAR:
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureKeyboard) {
+			return 0;
+		}
+
 		// make dialogs modal to avoid complications
 		if (g_input && g_input->IsActive()) {
 			if (g_input->ConsumeKey (uMsg, wParam) != Select::key_ignore) bRenderOnce = TRUE;
@@ -2577,6 +2590,9 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 	// *** User Keyboard Input ***
 	case WM_KEYDOWN:
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureKeyboard) {
+			return 0;
+		}
 
 		// modifiers
 		kmod = 0;
@@ -2599,10 +2615,18 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_RBUTTONDOWN:
 	case WM_LBUTTONUP:
 	case WM_RBUTTONUP: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		if (MouseEvent(uMsg, wParam, LOWORD(lParam), HIWORD(lParam)))
 			break; //return 0;
 		} break;
 	case WM_MOUSEWHEEL: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		int x = LOWORD(lParam);
 		int y = HIWORD(lParam);
 		if (!bFullscreen) {
@@ -2615,6 +2639,10 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			break; //return 0;
 		} break;
 	case WM_MOUSEMOVE: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		int x = LOWORD(lParam);
 		int y = HIWORD(lParam);
 		MouseEvent(uMsg, wParam, x, y);

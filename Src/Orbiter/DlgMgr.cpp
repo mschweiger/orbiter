@@ -1,12 +1,15 @@
-// Copyright (c) Martin Schweiger
+﻿// Copyright (c) Martin Schweiger
 // Licensed under the MIT License
 
+#define EXPORT_IMGUI_CONTEXT
 #include <stdio.h>
 #include "GraphicsAPI.h"
 #include "DlgMgr.h"
 #include "Resource.h"
 #include "Orbiter.h"
 #include "Log.h"
+#include "imgui.h"
+#include "imgui_impl_win32.h"
 
 using namespace oapi;
 
@@ -49,11 +52,13 @@ DialogManager::DialogManager (Orbiter *orbiter, HWND hAppWnd)
 	nList = nListBuf = 0;
 	firstEntry = NULL;
 	lastEntry = NULL;
+	InitImGui();
 }
 
 DialogManager::~DialogManager ()
 {
 	Clear();
+	ShutdownImGui();
 }
 
 
@@ -395,3 +400,85 @@ DWORD WINAPI DlgThreadProc (void *data)
 // ====================================================================
 // End tread management
 // ====================================================================
+// 
+// ====================================================================
+// ImGui
+// ====================================================================
+
+DLLEXPORT ImGuiContext* GImGui = NULL;
+
+const ImWchar* GetGlyphRangesOrbiter()
+{
+	static const ImWchar ranges[] =
+	{
+		0x0020, 0x00FF, // Basic Latin + Latin Supplement
+		0x00A0, 0x02D9, // Polish characters 
+		0x0393, 0x03C2, // Greek characters
+		0x221A, 0x221A, // √
+		0x222B, 0x222B, // ∫
+		0x2260, 0x2264, // ≠ ≤ ≥
+		0x02DD, 0x02DD, // ˝
+		0,
+	};
+	return &ranges[0];
+}
+
+static void ImGuiSetStyle()
+{
+	// Setup Dear ImGui style
+	ImGui::StyleColorsClassic();
+}
+
+void DialogManager::InitImGui()
+{
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	// Viewports don't play nice when in full screen mode
+	if(!pOrbiter->IsFullscreen())
+		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+	ImGuiSetStyle();
+
+	ImFontConfig config;
+
+	ImFontConfig icons_config;
+	icons_config.MergeMode = true;
+	icons_config.PixelSnapH = true;
+	icons_config.FontDataOwnedByAtlas = false;
+
+	io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 18.0f, &config, GetGlyphRangesOrbiter());
+	io.Fonts->Build();
+
+	ImGui_ImplWin32_Init(hWnd);
+	gc->clbkImGuiInit();
+}
+
+void DialogManager::ShutdownImGui()
+{
+	gc->clbkImGuiShutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+}
+
+void DialogManager::ImGuiNewFrame()
+{
+	gc->clbkImGuiNewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	//ImGui::ShowDemoWindow();
+
+	// We can't use a range-based loop here because Show() may unregister the current dialog
+	for (auto it = DlgImGuiList.begin(); it != DlgImGuiList.end();)
+	{
+		auto current = it++;
+		if ((*current)->IsActive()) {
+			(*current)->Display();
+		}
+	}
+	ImGui::EndFrame();
+}

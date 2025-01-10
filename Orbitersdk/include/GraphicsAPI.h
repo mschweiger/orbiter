@@ -1481,6 +1481,11 @@ public:
 	virtual bool clbkFilterElevation(OBJHANDLE hPlanet, int ilat, int ilng, int lvl, double elev_res, INT16* elev) { return false; }
 	// @}
 
+	virtual void clbkImGuiNewFrame () = 0;
+	virtual void clbkImGuiRenderDrawData () = 0;
+	virtual void clbkImGuiInit () = 0;
+	virtual void clbkImGuiShutdown() = 0;
+
 protected:
 	/** \brief Launchpad video tab indicator
 	 *
@@ -2055,5 +2060,21 @@ private:
 OAPIFUNC bool oapiRegisterGraphicsClient (oapi::GraphicsClient *gc);
 
 OAPIFUNC bool oapiUnregisterGraphicsClient (oapi::GraphicsClient *gc);
+
+class OAPIFUNC DialogImGui {
+public:
+	virtual ~DialogImGui() = default;
+	bool IsActive() { return active; }
+	void Activate() { active = true; }
+	void Display() {
+		Draw();
+		if (!active) OnClose();
+	}
+	virtual void OnClose() {};
+private:
+	virtual void Draw() = 0;
+protected:
+	bool active = false;
+};
 
 #endif // !__GRAPHICSAPI_H
