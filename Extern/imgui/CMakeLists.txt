@@ -14,3 +14,8 @@ FetchContent_MakeAvailable(imgui)
 install(FILES ${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf
 	DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
 )
+
+install(FILES ${imgui_SOURCE_DIR}/imgui.h ${imgui_SOURCE_DIR}/imconfig.h
+	DESTINATION ${ORBITER_INSTALL_SDK_DIR}/include
+)
+

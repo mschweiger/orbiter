@@ -120,6 +120,7 @@ class VESSEL;
 class CELBODY;
 class ExternMFD;
 class Interpreter;
+class DialogImGui;
 
 namespace oapi {
 	class Module;
@@ -6034,6 +6035,14 @@ OAPIFUNC bool       oapiUnregisterCustomCmd (int cmdId);
 OAPIFUNC HWND       oapiOpenDialog (HINSTANCE hDLLInst, int resourceId, DLGPROC msgProc, void *context = 0);
 
 	/**
+	* \brief Open a dialog box specified by a DialogImGui object.
+	* \param dlg pointer to a DialogImGui object responsible for drawing the dialog box.
+	* \note Only one instance of a dialog box can be open at a time. A second call to
+	*  oapiOpenDialog() with the same dialog will do nothing.
+	*/
+OAPIFUNC void       oapiOpenDialog (DialogImGui *dlg);
+
+	/**
 	* \brief Open a dialog box defined as a Windows resource. This version provides additional
 	*  functionality compared to oapiOpenDialog().
 	* \param hDLLInst module instance handle (as obtained from InitModule)
@@ -6071,6 +6080,12 @@ OAPIFUNC HWND       oapiFindDialog (HINSTANCE hDLLInst, int resourceId);
 	*  dialog message handler to close a dialog which was opened by oapiOpenDialog().
 	*/
 OAPIFUNC void       oapiCloseDialog (HWND hDlg);
+
+	/**
+	* \brief Close a dialog box.
+	* \param dlg object pointer that was used to open the dialog box.
+	*/
+OAPIFUNC void       oapiCloseDialog (DialogImGui *dlg);
 
 	/**
 	* \brief Retrieves the context pointer of a dialog box which has been defined during the call to oapiOpenDialog().
