@@ -712,6 +712,24 @@ HWND Orbiter::CreateRenderWindow (Config *pCfg, const char *scenario)
 			plZ4 = 1; // invalidate
 	}
 
+	if (gclient) {
+		// GDI resources - NOT VALID FOR ALL CLIENTS!
+		InitializeGDIResources (hRenderWnd);
+		pDlgMgr = new DialogManager (this, hRenderWnd);
+
+		// global dialog resources
+		g_select = new Select(); TRACENEW
+		pDlgMgr->AddEntry(g_select);
+		g_input = new InputBox(); TRACENEW
+		pDlgMgr->AddEntry(g_input);
+
+		// playback screen annotation manager
+		snote_playback = gclient->clbkCreateAnnotation ();
+	}
+	else {
+		pDlgMgr = new DialogManager(this, m_pConsole->WindowHandle());
+	}
+
 	// read simulation environment state
 	strcpy (ScenarioName, scenario);
 	g_qsaveid = 0;
@@ -754,24 +772,6 @@ HWND Orbiter::CreateRenderWindow (Config *pCfg, const char *scenario)
 		if (g_pane) g_pane->SetFOV (g_camera->Aperture());
 	}
 	LOGOUT ("Finished initialising camera");
-
-	if (gclient) {
-		// GDI resources - NOT VALID FOR ALL CLIENTS!
-		InitializeGDIResources (hRenderWnd);
-		pDlgMgr = new DialogManager (this, hRenderWnd);
-
-		// global dialog resources
-		g_select = new Select(); TRACENEW
-		pDlgMgr->AddEntry(g_select);
-		g_input = new InputBox(); TRACENEW
-		pDlgMgr->AddEntry(g_input);
-
-		// playback screen annotation manager
-		snote_playback = gclient->clbkCreateAnnotation ();
-	}
-	else {
-		pDlgMgr = new DialogManager(this, m_pConsole->WindowHandle());
-	}
 
 	bSession = true;
 	bVisible = (hRenderWnd != NULL);
