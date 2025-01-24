@@ -18,6 +18,7 @@
 #include "MaterialMgr.h"
 #include "VectorHelpers.h"
 #include <stdio.h>
+#include <imgui.h>
 
 enum scale { LIN, SQRT, SQR };
 
@@ -40,7 +41,7 @@ float cpr, cpg, cpb, cpa;
 double resbias = 4.0;
 char visual[64];
 int  origwidth;
-HWND hGfxDlg = NULL;
+GFXDialog *gfxDlg;
 HWND hDlg = NULL;
 HWND hDataWnd = NULL;
 vObject *vObj = NULL;
@@ -57,9 +58,52 @@ char OpenFileName[255];
 char SaveFileName[255];
 
 void UpdateMaterialDisplay(bool bSetup=false);
-void SetGFXSliders();
-INT_PTR CALLBACK WndProcGFX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
 void OpenGFXDlgClbk(void *context);
+
+class GFXDialog: public DialogImGui
+{
+	// Resettable slider from https://github.com/ocornut/imgui/issues/1751
+	static bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format = "%.3f")
+	{
+		bool ret = ImGui::SliderFloat(label, v, v_min, v_max, display_format);
+		if (ImGui::BeginPopupContextItem(label))
+		{
+			char buf[64];
+			sprintf(buf, "Reset to %f", v_default);
+			if (ImGui::MenuItem(buf))
+				*v = v_default;
+			ImGui::MenuItem("Close");
+			ImGui::EndPopup();
+		}
+		return ret;
+	}
+public:
+	void Draw() {
+		if(ImGui::Begin("Graphics controls", &active)) {
+			ImGui::PushItemWidth(150.0);
+			ImGui::SeparatorText("Post Processing Configuration");
+
+			SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
+			SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
+			SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.0f, 1.1f, 1.1f, "%1.2f");
+			SliderFloatReset("Gamma", &Config->GFXGamma, 0.0f, 1.0f, 1.0f, "%1.2f");
+
+			ImGui::SeparatorText("Light Configuration");
+
+			SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.0f, 1.0f, 1.2f, "%1.2f");
+			SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.0f, 1.0f, 1.0f, "%1.2f");
+			SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.0f, 1.0f, 0.5f, "%1.2f");
+			SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.0f, 1.0f, 0.3f, "%1.2f");
+
+			if(ImGui::Button("Recrete Sun/Glares")) {
+				g_client->GetScene()->CreateSunGlare();
+			}
+			ImGui::PopItemWidth();
+		}
+		ImGui::End();
+	}
+};
 
 
 struct _Variable {
@@ -158,7 +202,6 @@ void Create()
 {
 	vObj = NULL;
 	hDlg = NULL;
-	hGfxDlg = NULL;
 	nMesh = 0;
 	nGroup = 0;
 	sMesh = 0;
@@ -179,7 +222,8 @@ void Create()
 		dwCmd = 0;
 	}
 
-	dwGFX = oapiRegisterCustomCmd((char*)"D3D9 Graphics Controls", (char*)"This dialog allows to control various graphics options", OpenGFXDlgClbk, NULL);
+	gfxDlg = new GFXDialog;
+	dwGFX = oapiRegisterCustomCmd((char*)"D3D9 Graphics Controls", (char*)"This dialog allows to control various graphics options", OpenGFXDlgClbk, gfxDlg);
 
 	resbias = 4.0 + Config->LODBias;
   
@@ -269,7 +313,8 @@ void Release()
 {
 	vObj = NULL;
 	hDlg = NULL;
-	hGfxDlg = NULL;
+	delete gfxDlg;
+	gfxDlg = NULL;
 	if (dwCmd) oapiUnregisterCustomCmd(dwCmd);
 	if (dwGFX) oapiUnregisterCustomCmd(dwGFX);
 	dwCmd = NULL;
@@ -2059,284 +2104,13 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return oapiDefDialogProc(hWnd, uMsg, wParam, lParam);
 }
 
-
-
-
-
-
-// =============================================================================================
-//
-void CloseGFX()
-{
-	if (hGfxDlg != NULL) {
-		oapiCloseDialog(hGfxDlg);
-		hGfxDlg = NULL;
-	}
-}
-
 // =============================================================================================
 //
 void OpenGFXDlgClbk(void *context)
 {
-	HWND l_hDlg = oapiOpenDialog(g_hInst, IDD_GRAPHICS, WndProcGFX);
-	if (l_hDlg) hGfxDlg = l_hDlg; // otherwise open already
-	else return;
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_SETPOS, 1, 0);
-
-	// slider
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_SETRANGEMAX, 1, 255);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_SETRANGEMIN, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_SETTICFREQ, 1, 0);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_SETPOS, 1, 0);
-
-	
-
-	// reset-button(s)
-	HANDLE hImg = LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP1), IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT | LR_DEFAULTSIZE);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_INTENSITY_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_DISTANCE_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_THRESHOLD_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_GAMMA_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_SUNLIGHT_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_IRRADIANCE_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_LOCALMAX_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-	SendMessage(GetDlgItem(hGfxDlg, IDC_GFX_GLARE_RESET), BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hImg);
-
-	CreateToolTip(IDC_GFX_INTENSITY_RESET,   hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_DISTANCE_RESET,    hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_THRESHOLD_RESET,	 hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_GAMMA_RESET,       hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_SUNLIGHT_RESET,	 hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_IRRADIANCE_RESET,	 hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_LOCALMAX_RESET,	 hGfxDlg, (char*)"Reset to default");
-	CreateToolTip(IDC_GFX_GLARE_RESET,		 hGfxDlg, (char*)"Reset to default");
-
-	SetGFXSliders();
+	GFXDialog *gfx = (GFXDialog *)context;
+	oapiOpenDialog(gfx);
 }
-
-void SetGFXSliders()
-{
-	char lbl[32];
-	double fpos;
-
-	fpos = Config->GFXIntensity;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL1), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_SETPOS, 1, WORD(fpos*255.0));
-
-	fpos = Config->GFXDistance;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL2), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_SETPOS, 1, WORD(fpos*255.0));
-
-	fpos = Config->GFXThreshold;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL3), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_SETPOS, 1, WORD(fpos*255.0 / 2.0));
-
-	fpos = Config->GFXGamma;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL4), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_SETPOS, 1, WORD(fpos*255.0 / 2.5));
-
-	fpos = Config->GFXSunIntensity;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL5), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_SETPOS, 1, WORD(fpos*255.0 / 2.0));
-
-	fpos = Config->PlanetGlow;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL6), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_SETPOS, 1, WORD(fpos*255.0 / 2.0));
-
-	fpos = Config->GFXLocalMax;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL7), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_SETPOS, 1, WORD(fpos*255.0));
-
-	fpos = Config->GFXGlare;
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL8), lbl);
-	SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_SETPOS, 1, WORD(fpos * 255.0));
-}
-
-void ReadGFXSliders()
-{
-	char lbl[32];
-	double fpos;
-
-	fpos = (1.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_INTENSITY, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL1), lbl);
-	Config->GFXIntensity = fpos;
-	
-	fpos = (1.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_DISTANCE, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL2), lbl);
-	Config->GFXDistance = fpos;
-	
-	fpos = (2.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_THRESHOLD, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL3), lbl);
-	Config->GFXThreshold = fpos;
-
-	fpos = (2.5 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_GAMMA, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL4), lbl);
-	Config->GFXGamma = fpos;	
-
-	fpos = (2.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_SUNLIGHT, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL5), lbl);
-	Config->GFXSunIntensity = fpos;
-
-	fpos = (2.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_IRRADIANCE, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL6), lbl);
-	Config->PlanetGlow = fpos;
-
-	fpos = (1.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_LOCALMAX, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL7), lbl);
-	Config->GFXLocalMax = fpos;
-
-	fpos = (1.0 / 255.0) * double(SendDlgItemMessage(hGfxDlg, IDC_GFX_GLARE, TBM_GETPOS, 0, 0));
-	sprintf_s(lbl, 32, "%1.2f", fpos);
-	SetWindowTextA(GetDlgItem(hGfxDlg, IDC_GFX_VAL8), lbl);
-	Config->GFXGlare = fpos;
-}
-
-INT_PTR CALLBACK WndProcGFX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-	switch (uMsg) {
-
-	case WM_INITDIALOG:
-	{
-		return TRUE;	// All Init actions are done in OpenDlgClbk();
-	}
-
-	case WM_HSCROLL:
-	{
-		if (LOWORD(wParam) == TB_THUMBTRACK || LOWORD(wParam) == TB_ENDTRACK) {
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_INTENSITY)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_DISTANCE)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_THRESHOLD)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_GAMMA)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_SUNLIGHT)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_IRRADIANCE)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_LOCALMAX)) ReadGFXSliders();
-			if (HWND(lParam) == GetDlgItem(hWnd, IDC_GFX_GLARE)) ReadGFXSliders();
-		}
-		return false;
-	}
-
-	case WM_COMMAND:
-
-		switch (LOWORD(wParam)) {
-
-		case IDCANCEL:
-			CloseGFX();
-			break;
-
-		case IDC_GFX_RECOMPILE:
-			g_client->GetScene()->CreateSunGlare();
-			break;
-
-
-		case IDC_GFX_INTENSITY_RESET:
-			Config->GFXIntensity = 0.5;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_DISTANCE_RESET:
-			Config->GFXDistance = 0.8;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_THRESHOLD_RESET:
-			Config->GFXThreshold = 1.1;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_GAMMA_RESET:
-			Config->GFXGamma = 1.0;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_SUNLIGHT_RESET:
-			Config->GFXSunIntensity = 1.2;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_IRRADIANCE_RESET:
-			Config->PlanetGlow = 1.0;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_LOCALMAX_RESET:
-			Config->GFXLocalMax = 0.5;
-			SetGFXSliders();
-			break;
-
-		case IDC_GFX_GLARE_RESET:
-			Config->GFXGlare = 0.3;
-			SetGFXSliders();
-			break;
-
-		default:
-			LogErr("WndProcGFX() LOWORD(%hu), HIWORD(0x%hX)", LOWORD(wParam), HIWORD(wParam));
-			break;
-		}
-		break;
-	}
-
-	return oapiDefDialogProc(hWnd, uMsg, wParam, lParam);
-}
-
-
-
 
 } //namespace
 

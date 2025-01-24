@@ -69,6 +69,7 @@ class vObject;
 // ==============================================================
 
 namespace DebugControls {
+	class GFXDialog;
 
 	extern  DWORD sMesh;
 	extern  DWORD sGroup;
@@ -79,6 +80,7 @@ namespace DebugControls {
 	extern  double camSpeed;
 	extern  double resbias;
 	extern  std::map<int, const LightEmitter*> Emitters;
+	extern  GFXDialog *gfxDlg;
 	
 	/**
 	 * \brief Same functionality than 'official' GetConfigParam, but for
