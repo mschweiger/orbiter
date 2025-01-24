@@ -1,5 +1,5 @@
 
-#define IKernelSize 150
+#define IKernelSize 120
 
 uniform extern float4  Kernel[IKernelSize];
 uniform extern float3  vNr; // North
@@ -11,6 +11,7 @@ uniform extern bool    bUp;
 
 sampler tCube;
 sampler tSrc;
+sampler tRandom;
 
 
 float3 Paraboloidal_to_World(float3 i)
@@ -22,48 +23,54 @@ float3 Paraboloidal_to_World(float3 i)
 }
 
 
-float4 PSPreInteg(float x : TEXCOORD0, float y : TEXCOORD1) : COLOR
-{
-	float3 color = 0;
-	float2 p = float2(x, y);
-	for (int j = 0; j < 8; j++) {
-		for (int i = 0; i < 8; i++) {
-			color += tex2D(tSrc, p + (float2(i, j) - 4) * fD).rgb;
-		}
-	}
-	return float4(color * (1.0f/64.0f), 1);
-}
-
-
 float4 PSInteg(float x : TEXCOORD0, float y : TEXCOORD1, float2 sc : VPOS) : COLOR
 {
+	float a = tex2D(tRandom, float2(x*3,y*1.5)).r * 6.283185307;
 	float2 qw = float2(x, y) * 2.0f - 1.0f;
 	float3 vz = Paraboloidal_to_World(float3(qw.xy, (bUp ? 1 : -1)));
-
-	float3 q = lerp(vUp, vCp, frac(x * 21)); // Randomize rotation
-	float3 w = lerp(q, vNr, frac(y * 17));  // Randomize rotation
-	float3 vx = normalize(cross(vz, w));
-	float3 vy = normalize(cross(vz, vx));
+	float3 qx = normalize(cross(vz, vNr));
+	float3 qy = normalize(cross(vz, qx));
+	float3 vx = qx * sin(a) + qy * cos(a);
+	float3 vy = qx * cos(a) - qy * sin(a);
 
 	float3 sum = 0;
 
-	for (int i = 0; i < IKernelSize; i++) {
+	[unroll] for (int i = 0; i < IKernelSize; i++) {
 		float3 d = (vx*Kernel[i].x) + (vy*Kernel[i].y) + (vz*Kernel[i].z);
-		sum += texCUBE(tCube, d).rgb * Kernel[i].w;
+		float3 k = texCUBElod(tCube, float4(d, 0)).rgb;
+		sum += k; // *Kernel[i].w;
 	}
-	
-	return float4(sqrt(sum * fIntensity * (0.7f / IKernelSize)), 1.0f);
+
+	sum = sum * (1.0f / IKernelSize);
+	sum = sum * fIntensity;
+
+	return float4(sum, 1.0f);
 }
 
-
+// Exterior Irradiance blur
+//
 float4 PSPostBlur(float x : TEXCOORD0, float y : TEXCOORD1) : COLOR
 {
 	float3 color = 0;
 	float2 p = float2(x, y);
-	color += tex2D(tSrc, p).rgb;
-	color += tex2D(tSrc, p + float2(0,  1)*fD).rgb;
-	color += tex2D(tSrc, p + float2(0, -1)*fD).rgb;
-	color += tex2D(tSrc, p + float2(-1, 0)*fD).rgb;
-	color += tex2D(tSrc, p + float2(-1, 0)*fD).rgb;
-	return float4(color * 0.2, 1);
+	[unroll] for (int k = -2; k < 3; k++) {
+		[unroll] for (int i = -2; i < 3; i++) {
+			color += tex2D(tSrc, p + float2(i+0.5, k+0.5) * fD).rgb;		
+		}
+	}
+	return float4(color / 25, 1);
+}
+
+// Interior Irradiance blur
+//
+float4 PSPostBlurIntr(float x : TEXCOORD0, float y : TEXCOORD1) : COLOR
+{
+	float3 color = 0;
+	float2 p = float2(x, y);
+	[unroll] for (int k = -5; k < 6; k++) {
+		[unroll] for (int i = -5; i < 6; i++) {
+			color += tex2D(tSrc, p + float2(i + 0.5, k + 0.5) * fD).rgb;
+		}
+	}
+	return float4(color / 121, 1);
 }

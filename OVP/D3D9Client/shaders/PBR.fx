@@ -111,29 +111,6 @@ float4 PBR_PS(float4 sc : VPOS, PBRData frg) : COLOR
 	float3 cSun = saturate(gSun.Color);
 
 
-	// ----------------------------------------------------------------------
-	// Texture tuning controls for add-on developpers
-	// ----------------------------------------------------------------------
-
-#if defined(_DEBUG)
-	if (gTuneEnabled) {
-
-		nrmT *= gTune.Norm.rgb;
-
-		cDiff.rgb = pow(abs(cDiff.rgb), gTune.Albe.a) * gTune.Albe.rgb;
-		cRefl.rgb = pow(abs(cRefl.rgb), gTune.Refl.a) * gTune.Refl.rgb;
-		cEmis.rgb = pow(abs(cEmis.rgb), gTune.Emis.a) * gTune.Emis.rgb;
-		fRghn = pow(abs(fRghn), gTune.Rghn.a) * gTune.Rghn.g;
-		cSpec.rgba = cSpec.rgba * gTune.Spec.rgba;
-
-		cDiff = saturate(cDiff);
-		cRefl = saturate(cRefl);
-		fRghn = saturate(fRghn);
-		cSpec = min(cSpec, sMask);
-	}
-#endif
-
-
 	// Use alpha zero to mask off specular reflections
 	cSpec.rgb *= saturate(cSpec.a);
 
@@ -195,7 +172,7 @@ float4 PBR_PS(float4 sc : VPOS, PBRData frg) : COLOR
 	// ----------------------------------------------------------------------
 
 #if SHDMAP > 0
-	cSun *= smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
+	if (!gCockpit) cSun *= smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
 #endif
 
 
@@ -262,7 +239,7 @@ float4 PBR_PS(float4 sc : VPOS, PBRData frg) : COLOR
 
 	// Special alpha only texture in use, set the .rgb to 1.0f
 	// Used for panel background lighting in Delta Glider
-	if (gNoColor) cDiff.rgb = 1;
+	cDiff.rgb = saturate(cDiff.rgb + gNoColor.rgb);
 
 	// ------------------------------------------------------------------------
 	cDiff.rgb *= diffBaked;				// Lit the texture
@@ -431,7 +408,7 @@ float4 FAST_PS(float4 sc : VPOS, FASTData frg) : COLOR
 	if (gOITEnable) if (cDiff.a < 0.5f) clip(-1);
 
 	if (gFullyLit) {
-		if (gNoColor) cDiff.rgb = 1;
+		cDiff.rgb = saturate(cDiff.rgb + gNoColor.rgb);
 		cDiff.rgb *= saturate(gMtrl.diffuse.rgb + gMtrl.emissive.rgb);
 	}
 	else {
@@ -445,16 +422,15 @@ float4 FAST_PS(float4 sc : VPOS, FASTData frg) : COLOR
 		float3 cSun  = saturate(gSun.Color);
 		float  dLN   = saturate(-dot(gSun.Dir, nrmW));
 
-		//cSpec.rgb *= 0.33333f;
-
-		if (gNoColor) cDiff.rgb = 1;
+		cDiff.rgb = saturate(cDiff.rgb + gNoColor.rgb);
 
 		// ----------------------------------------------------------------------
 		// Add vessel self-shadows
 		// ----------------------------------------------------------------------
 
 #if SHDMAP > 0
-		float fShadow = smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
+		float fShadow = 1.0f;
+		if (!gCockpit) fShadow = smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
 		dLN *= fShadow;
 #endif
 

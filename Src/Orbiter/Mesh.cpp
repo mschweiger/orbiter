@@ -57,6 +57,7 @@ Mesh::Mesh ()
 {
 	name = NULL;
 	nGrp = nMtrl = nTex = 0;
+	Flags = 0;
 	GrpVis   = 0;
 	GrpSetup = false;
 	bModulateMatAlpha = false;
@@ -66,6 +67,7 @@ Mesh::Mesh (NTVERTEX *vtx, DWORD nvtx, WORD *idx, DWORD nidx, DWORD matidx, DWOR
 {
 	name = NULL;
 	nGrp = nMtrl = nTex = 0;
+	Flags = 0;
 	GrpVis   = 0;
 	GrpSetup = false;
 	AddGroup (vtx, nvtx, idx, nidx, matidx, texidx);
@@ -121,6 +123,7 @@ void Mesh::Set (const Mesh &mesh)
 	}
 	SetName(mesh.GetName());
 	bModulateMatAlpha = mesh.bModulateMatAlpha;
+	Flags = mesh.Flags;
 }
 
 Mesh::~Mesh ()
@@ -174,6 +177,16 @@ void Mesh::SetupGroup (DWORD grp)
 		if (d2 > d2max) d2max = d2;
 	}
 	GrpRad[grp] = (FLOAT)sqrt (d2max);
+}
+
+void Mesh::AddLabel(DWORD grp, const char* label)
+{
+	GrpLabels[grp] = std::string(label);
+}
+
+std::string Mesh::GetLabel(DWORD grp)
+{
+	return GrpLabels.find(grp) != GrpLabels.end() ? GrpLabels[grp] : std::string("");
 }
 
 int Mesh::AddGroup (NTVERTEX *vtx, DWORD nvtx, WORD *idx, DWORD nidx,
@@ -834,6 +847,10 @@ istream &operator>> (istream &is, Mesh &mesh)
 			break;
 		} else if (!_strnicmp (cbuf, "STATICMESH", 10)) {
 			staticmesh = true;
+		} else if (!_strnicmp(cbuf, "MESHFLAGS", 9)) {
+			DWORD mf = 0;
+			if (sscanf(cbuf + 9, "%lx", &mf) != 1) return is;	
+			mesh.Flags = mf | 0x1; // Flag entry is defined 
 		}
 	}
 
@@ -853,7 +870,9 @@ istream &operator>> (istream &is, Mesh &mesh)
 
 		for (;;) {
 			if (!is.getline (cbuf, 256)) { term = true; break; }
-			if (!_strnicmp (cbuf, "MATERIAL", 8)) {       // read material index
+			if (cbuf[0] == ';') {
+				// Do nothing
+			} else if (!_strnicmp (cbuf, "MATERIAL", 8)) {       // read material index
 				sscanf (cbuf+8, "%d", &mtrl_idx);
 				mtrl_idx--;
 			} else if (!_strnicmp (cbuf, "TEXTURE", 7)) { // read texture index
@@ -873,7 +892,9 @@ istream &operator>> (istream &is, Mesh &mesh)
 			} else if (!_strnicmp (cbuf, "FLIP", 4)) {
 				flipidx = true;
 			} else if (!_strnicmp (cbuf, "LABEL", 5)) {
-				// ignore group labels here
+				char label[64];
+				sscanf(cbuf + 5, "%63s", label);
+				mesh.AddLabel(g, label);
 			} else if (!_strnicmp (cbuf, "STATIC", 6)) {
 				flag |= 0x04;
 			} else if (!_strnicmp (cbuf, "DYNAMIC", 7)) {

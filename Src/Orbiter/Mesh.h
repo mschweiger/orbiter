@@ -13,6 +13,8 @@
 #include <d3d.h>
 #include <d3dtypes.h>
 #include <iostream>
+#include <map>
+#include <string>
 #include "OrbiterAPI.h"
 
 typedef char Str256[256];
@@ -103,6 +105,12 @@ public:
 
 	inline DWORD GetGroupUsrFlag (DWORD grp) const { return (grp < nGrp ? Grp[grp].UsrFlag : 0); }
 	// return the user-defined flag for group grp
+
+	void AddLabel(DWORD grp, const char* label);
+	// Add label to a mesh group
+
+	std::string GetLabel(DWORD grp);
+	// return group label
 
 	int AddGroup (NTVERTEX *vtx, DWORD nvtx, WORD *idx, DWORD nidx,
 		DWORD mtrl_idx = SPEC_INHERIT, DWORD tex_idx = SPEC_INHERIT,
@@ -203,6 +211,7 @@ public:
 
 	static void GlobalEnableSpecular (bool enable);
 	void EnableMatAlpha (bool enable);
+	bool EnableMatAlpha() {	return bModulateMatAlpha; }
 
 	friend std::istream &operator>> (std::istream &is, Mesh &mesh);
 	// read mesh from file
@@ -215,6 +224,7 @@ protected:
 	// Release textures acquired by the mesh
 
 private:
+	std::map<DWORD, std::string> GrpLabels;
 	DWORD nGrp;         // number of groups
 	GroupSpec *Grp;     // list of group specs	
 

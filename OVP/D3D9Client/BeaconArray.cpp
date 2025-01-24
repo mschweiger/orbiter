@@ -27,7 +27,7 @@ BeaconArray::BeaconArray(BeaconArrayEntry *pEnt, DWORD nEntry, vBase *_vB)
 {
 	_TRACE;
 
-	if (vB) hBase = vB->GetObject();
+	if (vB) hBase = vB->GetObjHandle();
 
 	pBeaconPos = new BeaconPos[nEntry];
 

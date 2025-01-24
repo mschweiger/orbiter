@@ -63,27 +63,15 @@ struct Flow
 	bool Emis;		// Enable Emission Maps
 	bool Spec;		// Enable Specular Maps
 	bool Refl;		// Enable Reflection Maps
-	bool Transl;	// Enble translucent effect
+	bool Transl;	// Enable translucent effect
 	bool Transm;	// Enable transmissive effect
 	bool Rghn;		// Enable roughness map
 	bool Norm;		// Enable normal map
 	bool Metl;		// Enable metalness map
 	bool Heat;		// Enable heat map
-};
-
-
-// Must match with counterpart D3D9Tune in D3D9Util.h
-
-struct Tune
-{
-	float4 Albe;		// Tune Diffese Maps
-	float4 Emis;		// Tune Emission Maps
-	float4 Spec;		// Tune Specular Maps
-	float4 Refl;		// Tune Reflection Maps
-	float4 Transl;		// Tune translucent effect
-	float4 Transm;		// Tune transmissive effect
-	float4 Norm;		// Tune normal map
-	float4 Rghn;		// Tune roughness map
+	bool Baked;		// Enable pre-baked local light map
+	bool BakedAO;	// Enable pre-baked AO map
+	bool BakedAmb;	// Enable pre-baked Ambient light map
 };
 
 
@@ -111,17 +99,20 @@ uniform extern float4    gAtmColor;         // Earth glow color
 uniform extern float4    gTexOff;			// Texture offsets used by surface manager
 uniform extern float4    gRadius;           // PlanetRad, AtmOuterLimit, CameraRad, CameraAlt
 uniform extern float4    gSHD;				// ShadowMap data
+uniform extern float4    gSHDPx;			// Shadow resolution [Pixels / meter] for each cascade
+uniform extern float4	 gSHDSubRect[3];	// Shadow cascade sub-rects
+uniform extern float4	 gVCIrrad;			// Virtual Cockpit ambient lighting control
 uniform extern float3    gCameraPos;        // Planet relative camera position, Unit vector
 uniform extern float3    gNorth;
 uniform extern float3    gEast;
+uniform extern float3	 gVCAmbient;		// Ambient level inside virtual cockpit
+uniform extern float3	 gNoColor;			// No Color option.
 uniform extern Sun		 gSun;				// Sun light direction
 uniform extern Mat       gMat;			    // Material input structure  TODO:  Remove all reference to this. Use gMtrl
 uniform extern Mat       gWater;			// Water material input structure
 uniform extern Mtrl      gMtrl;			    // Material input structure
-uniform extern Tune      gTune;			    // Texture tuning parameters
 uniform extern Light	 gLights[MAX_LIGHTS];
 uniform extern bool		 gLightsEnabled;
-uniform extern bool      gTuneEnabled;
 uniform extern bool      gModAlpha;		    // Configuration input
 uniform extern bool      gFullyLit;			// Always fully lit bypass lighting calculations
 uniform extern bool      gTextured;			// Enable Diffuse Texturing
@@ -132,9 +123,9 @@ uniform extern bool      gNight;			// Nighttime/Daytime
 uniform extern bool      gShadowsEnabled;	// Enable shadow maps
 uniform extern bool      gEnvMapEnable;		// Enable Environment mapping
 uniform extern bool		 gInSpace;			// True if a mesh is located in space
-uniform extern bool		 gNoColor;			// No color flag
 uniform extern bool		 gBaseBuilding;
 uniform extern bool		 gOITEnable;
+uniform extern bool		 gCockpit;
 uniform extern int       gSpecMode;
 uniform extern int       gHazeMode;
 uniform extern float     gProxySize;		// Cosine of the angular size of the Proxy Gbody. (one half)
@@ -164,8 +155,10 @@ uniform extern texture   gMetlMap;   		// Metalness Map
 uniform extern texture   gHeatMap;   		// Heat Map
 uniform extern texture   gTranslMap;		// Translucence Map
 uniform extern texture   gTransmMap;		// Transmittance Map
-uniform extern texture   gShadowMap;	    // Shadow Map
 uniform extern texture   gIrradianceMap;    // Irradiance Map
+uniform extern texture   gAmbientMap;		// Baked Ambient occlusion map
+uniform extern texture   gCombinedMap;		// Combined baked light map
+uniform extern texture   gCombinedSunMap;	// Combined baked light map
 
 // Legacy Atmosphere --------------------------------------------------------
 
@@ -262,16 +255,6 @@ sampler IrradS = sampler_state      // Irradiance map sampler
 	AddressV = CLAMP;
 };
 
-sampler ShadowS = sampler_state      // Shadow map sampler
-{
-	Texture = <gShadowMap>;
-	MinFilter = POINT;
-	MagFilter = POINT;
-	MipFilter = POINT;
-	AddressU = CLAMP;
-	AddressV = CLAMP;
-};
-
 sampler WrapS = sampler_state       // Primary Mesh texture sampler
 {
 	Texture = <gTex0>;
@@ -319,6 +302,43 @@ sampler EmisS = sampler_state       // Primary Mesh texture sampler
 	AddressU = WRAP;
 	AddressV = WRAP;
 };
+
+sampler BakedLightS = sampler_state       // Primary Mesh texture sampler
+{
+	Texture = <gCombinedMap>;
+	MinFilter = ANISOTROPIC;
+	MagFilter = LINEAR;
+	MipFilter = LINEAR;
+	MaxAnisotropy = ANISOTROPY_MACRO;
+	MipMapLODBias = 0;
+	AddressU = WRAP;
+	AddressV = WRAP;
+};
+
+sampler BakedSunS = sampler_state       // Primary Mesh texture sampler
+{
+	Texture = <gCombinedSunMap>;
+	MinFilter = ANISOTROPIC;
+	MagFilter = LINEAR;
+	MipFilter = LINEAR;
+	MaxAnisotropy = ANISOTROPY_MACRO;
+	MipMapLODBias = 0;
+	AddressU = WRAP;
+	AddressV = WRAP;
+};
+
+sampler BakedAOS = sampler_state       // Primary Mesh texture sampler
+{
+	Texture = <gAmbientMap>;
+	MinFilter = ANISOTROPIC;
+	MagFilter = LINEAR;
+	MipFilter = LINEAR;
+	MaxAnisotropy = ANISOTROPY_MACRO;
+	MipMapLODBias = 0;
+	AddressU = WRAP;
+	AddressV = WRAP;
+};
+
 
 sampler ReflS = sampler_state       // Primary Mesh texture sampler
 {

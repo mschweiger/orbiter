@@ -142,6 +142,8 @@ set(ShaderFiles
     ${ShaderDir}/NewPlanet.hlsl
     ${ShaderDir}/Scatter.hlsl
     ${ShaderDir}/Glare.hlsl
+    ${ShaderDir}/PreBakeLights.hlsl
+    ${ShaderDir}/Custom.hlsl
 	${ShaderDir}/Mesh.fx
 	${ShaderDir}/Metalness.fx
 	${ShaderDir}/Particle.fx
@@ -150,6 +152,7 @@ set(ShaderFiles
 	${ShaderDir}/SceneTech.fx
 	${ShaderDir}/Sketchpad.fx
 	${ShaderDir}/Vessel.fx
+    ${ShaderDir}/BakedVC.fx
 )
 
 source_group(APIHeaders FILES ${APIHeaders})

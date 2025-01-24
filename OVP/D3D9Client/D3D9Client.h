@@ -33,6 +33,10 @@
 #include <list>
 #include "WindowMgr.h"
 
+#define SHM_CASCADE_COUNT	3
+#define SHM_LOD_COUNT		6
+
+
 #define PP_DEFAULT			0x1
 #define PP_LENSFLARE		0x2
 
@@ -58,23 +62,61 @@ class FileParser;
 class OapiExtension;
 class D3D9Pad;
 
-typedef char* LPCHAR;
-typedef void* CAMERAHANDLE;
-typedef class D3D9Mesh* HMESH;
+typedef char * LPCHAR;
+typedef void * CAMERAHANDLE;
+typedef class D3D9Mesh * HMESH;
 typedef class SurfNative* lpSurfNative;
+
+
+enum class EnvCamType { Undefined, Exterior, Interior, Mesh };
+enum class ShdPackage { None, Main, VC, Stage };
+
+
+/**
+ * \brief Storage structure to keep reflection camera information.
+ */
+struct ENVCAMREC
+{
+	~ENVCAMREC()
+	{
+		SAFE_RELEASE(pCube);
+		SAFE_RELEASE(pIrrad);
+		SAFE_RELEASE(pPlane);
+		oapiWriteLog("ENVCAMREC::Destruct");
+	}
+
+	std::vector<WORD> omitAttc = {};
+	std::vector<WORD> omitDock = {};
+	DWORD			flags = 0;			///< Camera flags
+	EnvCamType		type = EnvCamType::Undefined;
+	FVECTOR3		lPos = { 0,0,0 };	///< Camera local position
+	FVECTOR3		lDir = { 1,0,0 };	///< Camera local direction (in 'PLANE' mode only)
+	float			near_clip = 0.1f;	///< Near clip-plane distance
+	float			da_curve = 0.4f;
+	float			da_bounch = 0.35f;
+	float			da_force = 0.2f;
+	int				mesh_idx = -1;		///< Camera is attached to a mesh 
+	int				group_idx = -1;		///< Camera is attached to a group
+	int				id = -1;			///< User Id, for binding
+	BYTE			iSide = 0;			///< [Private] Current side being rendered
+	bool			bRendered = false;	///< [Private] Rendering of camera view is completed
+	LPDIRECT3DCUBETEXTURE9 pCube = nullptr;	///< Reflection cube map
+	LPDIRECT3DTEXTURE9 pIrrad = nullptr;	///< Irradiance map (baraboloidal)
+	LPDIRECT3DTEXTURE9 pPlane = nullptr;	///< Reflection 2D map if (flags & ENVCAM_PLANE)
+};
 
 /**
  * \brief Statistical data storage
  */
-struct _D3D9Stats
-{
+struct _D3D9Stats {
+
 	_D3D9Stats()
 	{
 		memset(&Mesh, 0, sizeof(Mesh));
 		memset(&Timer, 0, sizeof(Timer));
 		TilesAllocated = 0;
 	}
-
+	
 	struct {
 		DWORD Vertices;		///< Number of vertices rendered
 		DWORD MeshGrps;		///< Number of mesh groups rendered
@@ -82,7 +124,7 @@ struct _D3D9Stats
 		DWORD TexChanges;	///< Number of texture changes
 		DWORD MtrlChanges;	///< Number of material changes
 	} Mesh;					///< Mesh related statistics
-			
+
 	struct {
 		D3D9Time Update;		///< clbkUpdate
 		D3D9Time Scene;			///< clbkRenderScene
@@ -112,13 +154,76 @@ struct RenderTgtData {
 	int code;
 };
 
+struct PickProp {
+	D3D9Mesh* pMesh;	// Mesh to pick, or NULL for full scene
+	float fnear;		// Near clip distance, ignore entities closer than this
+	bool bDualSided;	// Pick also back-facing triangles
+};
+
+struct SMapInput {
+	FVECTOR3 pos = { };		///< Shadow map center in camera centric coords (ecl frame)
+	FVECTOR3 ld = { };		///< Direction of sunlight (ecl frame)
+	float rad = { };			///< Radius of shadow mapped area
+};
+
+class SHADOWMAP : public SMapInput
+{
+public:
+
+	enum class sMapType { MultiLod, Cascaded, SingleLod };
+
+	SHADOWMAP(LPDIRECT3DDEVICE9 pDevice, sMapType tp, DWORD sz = 1024);
+	~SHADOWMAP();
+
+	LPDIRECT3DTEXTURE9 Map(int idx) const
+	{
+		if (tp == sMapType::MultiLod) {
+			if (idx == 0) return ptShmRT[lod];
+			else return nullptr;
+		}
+		return ptShmRT[idx];
+	}
+
+	void Clear() { bValid = false; }
+	bool IsValid() const { return bValid && (Map(0) != nullptr); }
+
+	
+
+	FMATRIX4	mVP[SHM_CASCADE_COUNT] = {};
+	FVECTOR4	Subrect[SHM_CASCADE_COUNT] = {};
+	FVECTOR4	SubrectTF[SHM_CASCADE_COUNT] = {};
+	FVECTOR2	Center[SHM_CASCADE_COUNT] = {};
+	float		SubPx[SHM_CASCADE_COUNT] = {};
+	FMATRIX4	mLVP = {};
+	float		dist = 0.0f;	// Shadow camera distance from shadow origin
+	float		depth = 0.0f;	// near to far plane distance. i.r. depth of the field
+	int			lod = 0;		// level of detail, 0 = highest
+	int			size = 0;		// Map size in pixels
+	int			cascades = 0;	// Number of active cascades
+	bool		bValid = false;
+	sMapType	tp;
+	
+
+	// Cascades are located in entries 0, 1, 2
+	// Active entry in MultiLod map is located in index pointed by 'lod'
+	// Active entry in SingleLod map is in index 0, 'lod' entry is 0
+	LPDIRECT3DSURFACE9 psShmRT[max(SHM_LOD_COUNT, SHM_CASCADE_COUNT)] = { nullptr };
+	LPDIRECT3DTEXTURE9 ptShmRT[max(SHM_LOD_COUNT, SHM_CASCADE_COUNT)] = { nullptr };
+};
+
+struct LVLH {
+	FVECTOR3 Up;
+	FVECTOR3 North;
+	FVECTOR3 East;
+};
+
 
 extern _D3D9Stats D3D9Stats;
 extern bool bFreeze;
 extern bool bFreezeEnable;
 extern bool bFreezeRenderAll;
-extern DWORD			uCurrentMesh;
-extern class vObject* pCurrentVisual;
+extern DWORD g_uCurrentMesh;
+extern class vObject* g_pCurrentVisual;
 extern set<D3D9Mesh*> MeshCatalog;
 extern set<SurfNative*>	SurfaceCatalog;
 extern IDirect3D9* g_pD3DObject;
@@ -267,6 +372,8 @@ public:
 	 * \sa oapiCreateSurface(DWORD,DWORD,DWORD)
 	 */
 	SURFHANDLE clbkLoadSurface (const char *fname, DWORD attrib, bool bPath = false);
+	SURFHANDLE clbkLoadMaps(const char* diff, const char* maps, bool bPath, SURFHANDLE hOld = NULL, bool bAll = true);
+	
 
 
 	/**
@@ -362,6 +469,15 @@ public:
 	 * \default None, returns \e false.
 	 */
 	bool clbkSetMeshProperty (DEVMESHHANDLE hMesh, DWORD property, DWORD value);
+	void clbkSetVisualProperty(VISHANDLE vis, VisualProp prp, int idx, const type_info& t, const void* val);
+
+	/**
+	 * \brief React to vessel docking, attaching events
+	 * \param hVesselA object handle of first vessel
+	 * \param hVesselB object handle of second vessel
+	 * \param type Event type
+	 */
+	void clbkScenarioChanged(OBJHANDLE hVessel, ScnChgEvent type);
 
 	/**
 	 * \brief React to vessel creation
@@ -1402,7 +1518,7 @@ public:
 	 * \brief Returns the object handle associated with the visual.
 	 * \return Object handle
 	 */
-	OBJHANDLE GetObject () const { return hObj; }
+	OBJHANDLE GetObjHandle () const { return hObj; }
 
 	/**
 	 * \brief Message callback.

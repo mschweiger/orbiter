@@ -62,6 +62,7 @@ public:
 
 	bool SetClickZone_Spherical (int i, const Vector &cnt, double rad);
 	bool SetClickZone_Quadrilateral (int i, const Vector &p1, const Vector &p2, const Vector &p3, const Vector &p4);
+	void GetClickZones(std::list<VCClickZone>* p_List);
 
 	bool ProcessMouse (UINT event, DWORD state, int x, int y);
 	void GetMouseState (int &idx, int &state, Vector &xs) const;
@@ -78,6 +79,7 @@ public:
 	virtual void OptionChanged(DWORD cat, DWORD item);
 
 private:
+
 	inline int AreaIndex (int aid) const
 	{ 
 		for (int i = 0; i < narea; i++) if (area[i]->id == aid) return i;

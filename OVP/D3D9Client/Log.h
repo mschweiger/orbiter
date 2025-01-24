@@ -47,6 +47,7 @@ extern std::queue<std::string> D3D9DebugQueue;
 void   RuntimeError(const char* File, const char* Fnc, UINT Line);
 void   D3D9DebugLog(const char *format, ...);
 void   D3D9DebugLogVec(const char* lbl, oapi::FVECTOR4 &v);
+void   D3D9DebugLogMatrix(const char* name, D3DXMATRIX* pM);
 void   D3D9InitLog(const char *file);
 void   D3D9CloseLog();
 void   LogTrace(const char *format, ...);
@@ -56,9 +57,11 @@ void   LogOk (const char *format, ...);
 void   LogBreak(const char* format, ...);
 void   LogBlu(const char *format, ...);
 void   LogOapi(const char *format, ...);
+void   LogVerbose(const char* format, ...);
 void   LogAlw(const char *format, ...);
 void   LogDbg(const char *color, const char *format, ...);
 void   LogClr(const char *color, const char *format, ...);
+
 
 double D3D9GetTime();
 void   D3D9SetTime(D3D9Time &inout, double ref);
@@ -66,6 +69,9 @@ void   D3D9SetTime(D3D9Time &inout, double ref);
 void   MissingRuntimeError();
 void   FailedDeviceError();
 void   LogAttribs(DWORD attrib, DWORD w, DWORD h, LPCSTR origin);
+void   LogVec(D3DXVECTOR4* pM, const char* name);
+void   LogVec(VECTOR3* pM, const char* name);
+void   LogMatrix(D3DXMATRIX* pM, const char* name);
 
 #define HALT() { RuntimeError(__FILE__,__FUNCTION__,__LINE__); }
 

@@ -1452,6 +1452,13 @@ DLLEXPORT bool oapiSaveSurface(const char* fname, SURFHANDLE hSrf, oapi::ImageFi
 	return false;
 }
 
+DLLEXPORT SURFHANDLE oapiLoadAdditionalTextureMaps(const char* diff, const char* maps, bool bPath, SURFHANDLE hOld, bool bAll)
+{
+	oapi::GraphicsClient* gc = g_pOrbiter->GetGraphicsClient();
+	if (gc) return gc->clbkLoadMaps(diff, maps, bPath, hOld, bAll);
+	else return NULL;
+}
+
 DLLEXPORT void oapiReleaseTexture (SURFHANDLE hTex)
 {
 	oapi::GraphicsClient *gc = g_pOrbiter->GetGraphicsClient();
@@ -1494,6 +1501,12 @@ DLLEXPORT DWORD oapiGetMeshFlags (MESHHANDLE hMesh)
 		return 0;
 	}
 	return ((Mesh*)hMesh)->GetFlags();
+}
+
+DLLEXPORT void oapiMeshGroupLabel(MESHHANDLE hMesh, DWORD grp, char* label, DWORD bufsize)
+{
+	Mesh* pMesh = (Mesh*)hMesh;
+	strncpy(label, pMesh->GetLabel(grp).c_str(), bufsize);
 }
 
 DLLEXPORT MESHGROUP *oapiMeshGroup (MESHHANDLE hMesh, DWORD idx)
@@ -1600,6 +1613,23 @@ DLLEXPORT bool oapiSetMeshProperty (MESHHANDLE hMesh, DWORD property, DWORD valu
 	switch (property) {
 	case MESHPROPERTY_MODULATEMATALPHA:
 		mesh->EnableMatAlpha (value != 0);
+		return true;
+	case MESHPROPERTY_FLAGS:
+		mesh->SetFlags(value);
+		return true;
+	}
+	return false;
+}
+
+DLLEXPORT bool oapiGetMeshProperty(MESHHANDLE hMesh, DWORD property, DWORD *value)
+{
+	Mesh* mesh = (Mesh*)hMesh;
+	switch (property) {
+	case MESHPROPERTY_MODULATEMATALPHA:
+		*value = mesh->EnableMatAlpha() ? 1 : 0;
+		return true;
+	case MESHPROPERTY_FLAGS:
+		*value = mesh->GetFlags();
 		return true;
 	}
 	return false;
@@ -1874,6 +1904,11 @@ DLLEXPORT void oapiVCSetAreaClickmode_Spherical (int id, const VECTOR3 &cnt, dou
 DLLEXPORT void oapiVCSetAreaClickmode_Quadrilateral (int id, const VECTOR3 &p1, const VECTOR3 &p2, const VECTOR3 &p3, const VECTOR3 &p4)
 {
 	g_pane->SetVCAreaClickmode_Quadrilateral (id, Vector(p1.x, p1.y, p1.z), Vector(p2.x,p2.y,p2.z), Vector(p3.x,p3.y,p3.z), Vector(p4.x,p4.y,p4.z));
+}
+
+DLLEXPORT void oapiVCGetAreaClickZones(std::list<VCClickZone>* p_List)
+{
+	g_pane->GetVCAreaClickZones(p_List);
 }
 
 DLLEXPORT oapi::Sketchpad *oapiGetSketchpad (SURFHANDLE surf)
@@ -2308,6 +2343,11 @@ DLLEXPORT void oapiWriteLine (FILEHANDLE file, char *line)
 DLLEXPORT void oapiWriteLog (char *line)
 {
 	LOGOUT (line);
+}
+
+DLLEXPORT void oapiWriteLogVerbose(char* line)
+{
+	LogOutFine(line);
 }
 
 DLLEXPORT void oapiExitOrbiter(int code)

@@ -39,3 +39,9 @@ float4 PSBlur(float x : TEXCOORD0, float y : TEXCOORD1) : COLOR
 	color /= (a*2.0f);
 	return float4(color, 1);
 }
+
+
+float4 PS2DBlur(float x : TEXCOORD0, float y : TEXCOORD1) : COLOR
+{
+	return float4(0.5, 0.5, 0.5, 1.0);
+}

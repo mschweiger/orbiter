@@ -28,6 +28,7 @@
 
 class vObject;
 class vPlanet;
+class vVessel;
 class D3D9ParticleStream;
 class D3D9Text;
 class D3D9Pad;
@@ -38,8 +39,6 @@ class D3D9Pad;
 #define GBUF_DEPTH				3
 #define GBUF_GDI				4
 #define GBUF_COUNT				5	// Buffer count
-
-#define SHM_LOD_COUNT			5
 
 #define TEX_NOISE				0
 #define TEX_CLUT				1
@@ -54,21 +53,37 @@ class D3D9Pad;
 #define RENDERPASS_SKETCHPAD	0x0006
 #define RENDERPASS_MAINOVERLAY	0x0007
 #define RENDERPASS_NORMAL_DEPTH	0x0008
+#define RENDERPASS_VC_SHADOWMAP 0x0009
+#define RENDERPASS_STAGESET		0x000A
 
 #define RESTORE ((LPDIRECT3DSURFACE9)(-1))
 #define CURRENT ((LPDIRECT3DSURFACE9)(-2))
 
 #define RENDERTURN_ENVCAM		0
 #define RENDERTURN_CUSTOMCAM	1
-#define RENDERTURN_IRRADIANCE   2
-#define RENDERTURN_LAST			2
+#define RENDERTURN_LAST			1
 
 #define SMAP_MODE_FOCUS			1
 #define SMAP_MODE_SCENE			2
 
 #define OBJTP_BUILDING			1000
 
+// Secundary scene render flags
+#define SCN_PLANETS		0x1
+#define SCN_VESSELS		0x2
+#define SCN_EXHAUST		0x4
+#define SCN_BEACONS		0x8
+#define SCN_PARTICLES	0x10
+#define SCN_BASESTRUCT	0x20
+#define SCN_ALLEXT		0x3F	///< All exterior features
+#define SCN_VC			0x40	///< Virtual cockpit
+#define SCN_STAGE		0x1000	///< Render a stage around the world. Cude texture needed.
+#define SCN_NOCLEAR		0x2000	///< Do not clear render target
+
 #define CAMERA(x) ((Scene::CAMREC*)x)
+
+
+
 
 class Scene {
 
@@ -80,13 +95,13 @@ class Scene {
 		vObject *vobj;         // visual instance
 		int	type;
 		float apprad;
-		VOBJREC *prev, *next;  // previous and next list entry
-	} *vobjFirst, *vobjLast;   // first and last list entry
+	};
 
 
 public:
 
 	FVECTOR3 vPickRay;
+	bool bStageSet = false;
 
 	struct FRUSTUM {
 		float znear;
@@ -108,12 +123,22 @@ public:
 		void*		pUser;
 	};
 
+	std::list<ENVCAMREC*> InteriorCams;
+	std::list<vObject*> Planets;
+	std::list<VOBJREC*> Visuals;
+	std::set<vVessel*> RootList;
+	std::set<vVessel*> Vessels;
+	std::set<vVessel*> eCamRenderList;
 	std::set<CAMREC*> CustomCams;
-	std::set<CAMREC*>::const_iterator camCurrent{};
+	std::set<CAMREC*>::const_iterator camCurrent;
+	std::set<vVessel*>::const_iterator vobjEnv, vobjIP;
+	std::list<ENVCAMREC*>::const_iterator itIC;
+
 
 	// Camera frustum parameters ========================================================
 	//
 	struct CAMERA {
+		float		corner;		// corner to center aperture [rad]
 		float		aperture;   // aperture [rad]
 		float		aspect;     // aspect ratio
 		float		nearplane;  // frustum nearplane distance
@@ -159,17 +184,9 @@ public:
 		D3DXCOLOR	color;
 	};
 
-	struct SHADOWMAPPARAM {
-		LPDIRECT3DTEXTURE9 pShadowMap;
-		D3DXMATRIX	mProj, mView, mViewProj;
-		D3DXVECTOR3	pos;
-		D3DXVECTOR3	ld;
-		float		rad;
-		float		dist;
-		float		depth;
-		int			lod;
-		int			size;
-	} smap;
+	SHADOWMAP* smEX = nullptr;	// Exterior shadow map
+	SHADOWMAP* smVC = nullptr;	// Virtual Cockpit shadow map
+	SHADOWMAP* smSS = nullptr;	// Shadow map for rendering in a stage-set
 
 	static void D3D9TechInit(LPDIRECT3DDEVICE9 pDev, const char *folder);
 
@@ -187,7 +204,34 @@ public:
 	//inline const oapi::D3D9Client *GetClient() const { return gc; }
 	inline oapi::D3D9Client *GetClient() const { return gc; }
 
-	void OnOptionChanged(int cat, int item);
+
+	void clbkOnOptionChanged(int cat, int item);
+	void clbkScenarioChanged(OBJHANDLE hV, ScnChgEvent e);
+	void clbkInitialise();
+
+	/**
+	 * \brief Update camera position, visuals, etc.
+	 */
+	void clbkUpdate();
+
+	/**
+	 * \brief Render the whole main scene
+	 */
+	void clbkRenderMainScene();
+
+	/**
+	 * \brief Create a visual for a new vessel if within visual range.
+	 * \param hVessel vessel object handle
+	 */
+	void clbkNewVessel(OBJHANDLE hVessel);
+
+	/**
+	 * \brief Delete a vessel visual prior to destruction of the logical vessel.
+	 * \param hVessel vessel object handle
+	 */
+	void clbkDeleteVessel(OBJHANDLE hVessel);
+
+
 
 	const D3D9Sun *GetSun() const { return &sunLight; }
 	const D3D9Light *GetLight(int index) const;
@@ -204,8 +248,10 @@ public:
 	void BeginPass(DWORD dwPass);
 	void PopPass();
 
+	const SHADOWMAP* GetSMapData(ShdPackage tp) const;
+
 	inline DWORD GetStencilDepth() const { return stencilDepth; }
-	inline const SHADOWMAPPARAM * GetSMapData() const { return &smap; }
+	
 	/**
 	 * \brief Get the ambient background colour
 	 */
@@ -222,18 +268,9 @@ public:
 	inline const DWORD ViewH() const { return viewH; }
 
 	bool UpdateCamVis();
-	void Initialise ();
+	
 
-	/**
-	 * \brief Update camera position, visuals, etc.
-	 */
-	void Update();
-
-	/**
-	 * \brief Render the whole main scene
-	 */
-	void RenderMainScene();
-
+	
 	/**
 	 * \brief Returns screen space sun visual parameters for Lens Flare rendering.
 	*/
@@ -247,18 +284,28 @@ public:
 	/**
 	 * \brief Render a secondary scene. (Env Maps, Shadow Maps, MFD Camera Views)
 	 */
-	void RenderSecondaryScene(std::set<class vVessel*> &RndList, std::set<class vVessel*> &AdditionalLightsList, DWORD flags = 0xFF);
-	int RenderShadowMap(D3DXVECTOR3 &pos, D3DXVECTOR3 &ld, float rad, bool bInternal = false, bool bListExists = false);
+	void RenderStageSet(const LPDIRECT3DCUBETEXTURE9 pCT);
+	void RenderSecondaryScene(std::set<class vVessel*> &RndList,
+		std::set<class vVessel*> &AdditionalLightsList, DWORD flags = SCN_ALLEXT,
+		const LPDIRECT3DCUBETEXTURE9 pCT = nullptr, SHADOWMAP* sm = nullptr);
 
-	bool IntegrateIrradiance(vVessel *vV, LPDIRECT3DCUBETEXTURE9 pSrc, LPDIRECT3DTEXTURE9 pOut);
+	int RenderShadowMap(SMapInput* smp, SHADOWMAP* out, std::list<vVessel*>& Casters, bool bInternal = false);
+	int RenderVCShadowMap(D3DXVECTOR3& cdir, D3DXVECTOR3& ld, std::list<vVessel*>& Casters);
+	bool RenderVCProbes(vVessel *vFocus);
+
+	bool IntegrateIrradiance(vVessel *vV, ENVCAMREC* ec, bool bInterior);
 	bool RenderBlurredMap(LPDIRECT3DDEVICE9 pDev, LPDIRECT3DCUBETEXTURE9 pSrc);
+	bool RenderBlurredMap(LPDIRECT3DDEVICE9 pDev, LPDIRECT3DTEXTURE9 pSrc);
 	void RenderMesh(DEVMESHHANDLE hMesh, const oapi::FMATRIX4 *pWorld);
+	void RenderStage(LPDIRECT3DCUBETEXTURE9 pCT);
 
-	LPDIRECT3DSURFACE9 GetIrradianceDepthStencil() const { return pIrradDS; }
 	LPDIRECT3DSURFACE9 GetEnvDepthStencil() const { return pEnvDS; }
 	LPDIRECT3DSURFACE9 GetBuffer(int id) const { return psgBuffer[id]; }
 	LPDIRECT3DTEXTURE9 GetSunTexture() const { return pSunTex; }
 	LPDIRECT3DTEXTURE9 GetSunGlareAtm() const { return pSunGlareAtm; }
+
+	LPDIRECT3DSURFACE9 GetDepthStencilMatch(LPDIRECT3DSURFACE9 pRef);
+	LPDIRECT3DSURFACE9 GetDepthStencil(DWORD size);
 
 	/**
 	 * \brief Render any shadows cast by vessels on planet surfaces
@@ -271,17 +318,7 @@ public:
 	 */
 	void RenderVesselShadows(OBJHANDLE hPlanet, float depth) const;
 
-	/**
-	 * \brief Create a visual for a new vessel if within visual range.
-	 * \param hVessel vessel object handle
-	 */
-	void NewVessel (OBJHANDLE hVessel);
-
-	/**
-	 * \brief Delete a vessel visual prior to destruction of the logical vessel.
-	 * \param hVessel vessel object handle
-	 */
-	void DeleteVessel (OBJHANDLE hVessel);
+	
 
 	void AddParticleStream (class D3D9ParticleStream *_pstream);
 	void DelParticleStream (DWORD idx);
@@ -304,7 +341,7 @@ public:
 	// Picking Functions ============================================================================================================
 	//
 	D3DXVECTOR3		GetPickingRay(short x, short y);
-	D3D9Pick		PickScene(short xpos, short ypos);
+	D3D9Pick		PickScene(short xpos, short ypos, const PickProp* p);
 	TILEPICK		PickSurface(short xpos, short ypos);
 	D3D9Pick		PickMesh(DEVMESHHANDLE hMesh, const LPD3DXMATRIX pW, short xpos, short ypos);
 
@@ -335,12 +372,14 @@ public:
 	void			SetCameraFrustumLimits(double nearlimit, double farlimit);
 	float			GetDepthResolution(float dist) const;
 	float			CameraInSpace() const;
+	void			ResetOrigin(VECTOR3 pos);
 
 					// Acquire camera information from the Orbiter and initialize internal camera setup
 	bool			UpdateCameraFromOrbiter(DWORD dwPass);
 
 					// Manually initialize client's internal camera setup
 	bool			SetupInternalCamera(D3DXMATRIX *mView, VECTOR3 *pos, double apr, double asp);
+	void			CameraOffOrigin90(D3DXMATRIX* mView, FVECTOR3 pos);
 
 					// Pan Camera in a mesh debugger
 	bool			CameraPan(VECTOR3 pan, double speed);
@@ -354,6 +393,7 @@ public:
 	float			GetCameraFarPlane() const { return Camera.farplane; }
 	float			GetCameraNearPlane() const { return Camera.nearplane; }
 	float			GetCameraAperture() const { return (float)Camera.aperture; }
+	float			GetCameraApertureCorner() const { return (float)Camera.corner; }
 	VECTOR3			GetCameraGPos() const { return Camera.pos; }
 	VECTOR3			GetCameraGDir() const { return Camera.dir; }
 	OBJHANDLE		GetCameraProxyBody() const { return Camera.hObj_proxy; }
@@ -412,12 +452,19 @@ protected:
 	void RenderGlares();
 
 private:
+	void		ActivateLocalLights(vObject* vO, bool bInterior);
+	void		ActivateAllLocalLights(bool bInterior);
 	void		ComputeLocalLightsVisibility();
 	DWORD		GetActiveParticleEffectCount();
 	float		ComputeNearClipPlane();
 	void		VisualizeCubeMap(LPDIRECT3DCUBETEXTURE9 pCube, int mip);
+	void		VisualizeShadowMap(SHADOWMAP *sm);
 	VOBJREC *	FindVisual (OBJHANDLE hObj) const;
 	void		RenderVesselMarker(vVessel *vV, D3D9Pad *pSketch);
+	float		GetLODLevel(SMapInput* smi);
+	void		CombineSMaps(SMapInput* a, SMapInput* b, SMapInput* out);
+
+	LPDIRECT3DTEXTURE9 RenderObjectsInShadow(SMapInput* smi, list<vVessel*>& rList, D3D9Pad *pSkp = nullptr);
 
 	// Locate the visual for hObj in the list if present, or return
 	// NULL if not found
@@ -441,89 +488,109 @@ private:
 
 	// Scene variables ================================================================
 	//
-	oapi::D3D9Client* gc;
-	LPDIRECT3DDEVICE9 pDevice; // render device
-	DWORD viewW, viewH;        // render viewport size
-	DWORD stencilDepth;        // stencil buffer bit depth
-	D3D9CelestialSphere* m_celSphere; // celestial sphere background
-	DWORD iVCheck;             // index of last object checked for visibility
-	bool  bLocalLight;         // enable local light sources
-	bool  surfLabelsActive;    // v.2 surface labels activated?
 
-	OBJHANDLE hSun;
+	struct _cascfg {
+		float size;
+		float dist;
+	} cascfg[SHM_CASCADE_COUNT] = {};
 
-	D3D9ParticleStream **pstream; // list of particle streams
-	DWORD                nstream; // number of streams
+	oapi::D3D9Client* gc = {};
+	LPDIRECT3DDEVICE9 pDevice = {}; // render device
+	DWORD viewW = {};
+	DWORD viewH = {};				// render viewport size
+	DWORD stencilDepth = {};        // stencil buffer bit depth
+	D3D9CelestialSphere* m_celSphere = {}; // celestial sphere background
+	DWORD iVCheck = {};             // index of last object checked for visibility
+	bool  bLocalLight = {};         // enable local light sources
+	bool  surfLabelsActive = {};    // v.2 surface labels activated?
 
+	OBJHANDLE hSun = {};
 
-	D3DCOLOR bg_rgba;          // ambient background colour
+	D3D9ParticleStream **pstream = {}; // list of particle streams
+	DWORD nstream = {};				// number of streams
+
+	DEVMESHHANDLE dmCubeMesh = {};
+	D3DCOLOR bg_rgba = {};			// ambient background colour
 
 	// GDI resources ====================================================================
 	//
-	oapi::Font *label_font[4];
+	oapi::Font *label_font[4] = {};
 
-	std::list<vVessel *> RenderList;
-	std::list<vVessel *> SmapRenderList;
-	std::list<vVessel *> Casters;
+	std::list<vVessel*> Shadowed;
+	std::list<vVessel*> RenderList;
+	std::list<vVessel*> ObjectsToShadowMap;
+	std::list<vVessel*> Casters;
 	std::stack<CAMERA>	CameraStack;
 	std::stack<DWORD>	PassStack;
 	std::stack<FRUSTUM> FrustumStack;
 
 
-	CAMERA		Camera;
-	D3D9Light*	Lights;
-	D3D9Sun	    sunLight;
+	CAMERA		Camera = {};
+	D3D9Light*	Lights = {};
+	D3D9Sun	    sunLight = {};
 
-	VECTOR3		sky_color;
-	double      bglvl;
+	VECTOR3		origin = {};
+	VECTOR3		sky_color = {};
+	double      bglvl = {};
 
-	float		fDisplayScale;
-	float		lmaxdst2;
-	DWORD		nLights;
-	DWORD		nplanets;		// Number of distance sorted planets to render
-	DWORD		dwTurn;
-	DWORD		dwFrameId;
-	DWORD		camIndex;
-	DWORD		RenderFlags;
-	bool		bRendering;
+	float		fCascadeRatio = {};
+	float		fDisplayScale = {};
+	float		lmaxdst2 = {};
+	DWORD		nLights = {};
+	DWORD		dwTurn = {};
+	DWORD		dwFrameId = {};
+	DWORD		camIndex = {};
+	DWORD		RenderFlags = {};
+	bool		bRendering = {};
 
-	oapi::Font *pAxisFont;
-	oapi::Font *pLabelFont;
-	oapi::Font *pDebugFont;
+	oapi::Font *pAxisFont = {};
+	oapi::Font *pLabelFont = {};
+	oapi::Font *pDebugFont = {};
 
-	SurfNative *pLblSrf;
+	SurfNative *pLblSrf = {};
 
-	class ImageProcessing *pLightBlur, *pBlur, *pGDIOverlay, *pIrradiance, *pVisDepth, *pCreateGlare;
-	class ShaderClass *pLocalCompute, *pRenderGlares;
+	class ImageProcessing* pLightBlur = {};
+	class ImageProcessing* pBlur = {};
+	class ImageProcessing* pBlur2D = {};
+	class ImageProcessing* pGDIOverlay = {};
+	class ImageProcessing* pIrradiance = {};
+	class ImageProcessing* pVisDepth = {};
+	class ImageProcessing* pCreateGlare = {};
+	class ImageProcessing* pBakeLights = {};
+	class ShaderClass* pLocalCompute = {};
+	class ShaderClass* pRenderGlares = {};
+	class ShaderClass* pRenderStage = {};
 
-	class vVessel *vFocus;
-	VOBJREC *vobjEnv, *vobjIrd;
-	double dVisualAppRad;
+	class vVessel *vFocus = {};
+	double dVisualAppRad = {};
 
-	FVECTOR2 DepthSampleKernel[57];
+	FVECTOR2 DepthSampleKernel[57] = {};
 
-	LPDIRECT3DTEXTURE9 pSunTex, pLightGlare, pSunGlare, pSunGlareAtm;
-	LPDIRECT3DTEXTURE9 pLocalResults;
-	LPDIRECT3DSURFACE9 pLocalResultsSL;
+	LPDIRECT3DTEXTURE9 pSunTex = {};
+	LPDIRECT3DTEXTURE9 pLightGlare = {};
+	LPDIRECT3DTEXTURE9 pSunGlare = {};
+	LPDIRECT3DTEXTURE9 pSunGlareAtm = {};
+	LPDIRECT3DTEXTURE9 pLocalResults = {};
+	LPDIRECT3DSURFACE9 pLocalResultsSL = {};
 
 	// Blur Sampling Kernel ==============================================================
-	LPDIRECT3DCUBETEXTURE9 pBlrTemp[5];
-	LPDIRECT3DCUBETEXTURE9 pIrradTemp;
-	LPDIRECT3DTEXTURE9 pIrradTemp2, pIrradTemp3;
+	LPDIRECT3DCUBETEXTURE9 pBlrTemp[5] = {};
+	LPDIRECT3DTEXTURE9 pBlrTemp2D[5] = {};
+	LPDIRECT3DTEXTURE9 pIrradTemp = {};
+	LPDIRECT3DTEXTURE9 ptRandom = {};
 
 	// Deferred Experiment ===============================================================
 	//
-	LPDIRECT3DSURFACE9 psgBuffer[GBUF_COUNT];
-	LPDIRECT3DTEXTURE9 ptgBuffer[GBUF_COUNT];
-	LPDIRECT3DSURFACE9 pOffscreenTarget;
-	LPDIRECT3DTEXTURE9 pTextures[TEX_COUNT];
+	LPDIRECT3DSURFACE9 psgBuffer[GBUF_COUNT] = {};
+	LPDIRECT3DTEXTURE9 ptgBuffer[GBUF_COUNT] = {};
+	LPDIRECT3DSURFACE9 pOffscreenTarget = {};
+	LPDIRECT3DTEXTURE9 pTextures[TEX_COUNT] = {};
 
-	LPDIRECT3DSURFACE9 pEnvDS, pIrradDS, pDepthNormalDS;
-	LPDIRECT3DSURFACE9 psShmDS[SHM_LOD_COUNT];
-	LPDIRECT3DSURFACE9 psShmRT[SHM_LOD_COUNT];
-	LPDIRECT3DTEXTURE9 ptShmRT[SHM_LOD_COUNT];
+	LPDIRECT3DSURFACE9 pEnvDS = {};
+	LPDIRECT3DSURFACE9 pDepthNormalDS = {};
+	LPDIRECT3DSURFACE9 psShmDS[SHM_LOD_COUNT] = {};
 
-	LocalLightsCompute LLCBuf[MAX_SCENE_LIGHTS + 1];
+	LocalLightsCompute LLCBuf[MAX_SCENE_LIGHTS + 1] = {};
 
 	// Rendering Technique related parameters ============================================
 	//

@@ -612,7 +612,7 @@ gcCore::PickGround gcCore2::GetTileData(HPLANETMGR vPl, double lng, double lat, 
 	pTile->GetElevation(lng, lat, &pg.elev, &pg.normal, NULL, true, false);
 
 	VECTOR3 pos = vP->GetUnitSurfacePos(lng, lat) * (vP->GetSize() + pg.elev);
-	MATRIX3 mRot; oapiGetRotationMatrix(vP->Object(), &mRot);
+	MATRIX3 mRot; oapiGetRotationMatrix(vP->GetObjHandle(), &mRot);
 
 	pos = mul(mRot, pos) + vP->PosFromCamera();
 

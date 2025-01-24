@@ -24,8 +24,10 @@
 
 using namespace oapi;
 
-
+LPDIRECT3DTEXTURE9 D3D9Mesh::pShadowMap[SHM_CASCADE_COUNT] = {};
+FVECTOR4 D3D9Mesh::ShdSubRect[SHM_CASCADE_COUNT] = {};
 MeshShader* D3D9Mesh::s_pShader[16] = {};
+
 MeshShader::VSConst MeshShader::vs_const = {};
 MeshShader::PSConst MeshShader::ps_const = {};
 MeshShader::PSBools MeshShader::ps_bools = {};
@@ -51,6 +53,7 @@ MeshBuffer::MeshBuffer(DWORD _nVtx, DWORD _nFace, const class D3D9Mesh *_pRoot)
 {
 	nVtx = _nVtx;
 	nIdx = _nFace * 3;
+	nRef = 1;
 
 	pVB = NULL;
 	pIB = NULL;
@@ -72,6 +75,7 @@ MeshBuffer::MeshBuffer(MeshBuffer *pSrc, const class D3D9Mesh *_pRoot)
 {
 	nVtx = pSrc->nVtx;
 	nIdx = pSrc->nIdx;
+	nRef = 1;
 
 	pVB = NULL;
 	pIB = NULL;
@@ -104,6 +108,19 @@ MeshBuffer::~MeshBuffer()
 	SAFE_RELEASE(pVB);
 	SAFE_RELEASE(pGB);
 	SAFE_RELEASE(pSB);
+	oapiWriteLog("MeshBuffer::Destruct");
+}
+
+bool MeshBuffer::Release()
+{
+	nRef--;
+	return nRef <= 0;
+}
+
+MeshBuffer* MeshBuffer::Reference()
+{
+	nRef++;
+	return this;
 }
 
 void MeshBuffer::MustRemap(DWORD mode)
@@ -182,16 +199,18 @@ void D3D9Mesh::Null(const char *meshName /* = NULL */)
 	Grp = NULL;
 	nTex = 0;
 	Tex	= NULL;
-	pTune = NULL;
 	nMtrl = 0;
 	pBuf = NULL;
 	Mtrl = NULL;
 	pGrpTF = NULL;
-	cAmbient = 0;
+	cAmbient = { 0.0f, 0.0f, 0.0f };
 	MaxFace  = 0;
 	MaxVert  = 0;
 	vClass = 0;
-	DefShader = SHADER_NULL;
+	DefShader = SHADER_LEGACY;
+	hOapiMesh = NULL;
+	MeshFlags = 0;
+	Flags = 0;
 
 	bIsTemplate = false;
 	bGlobalTF = false;
@@ -202,7 +221,14 @@ void D3D9Mesh::Null(const char *meshName /* = NULL */)
 	bCanRenderFast = false;
 	bMtrlModidied = false;
 
+	bli = BakedLights.begin();
+
 	Locals = new LightStruct[Config->MaxLights()];
+
+	for (int i = 0; i < SHM_CASCADE_COUNT; i++) {
+		pShadowMap[i] = NULL;
+		ShdSubRect[i] = { 0,0,1,1 };
+	}
 
 	memset(Locals, 0, sizeof(LightStruct) * Config->MaxLights());
 	memset(LightList, 0, sizeof(LightList));
@@ -219,6 +245,9 @@ D3D9Mesh::D3D9Mesh(const char *fname) : D3D9Effect()
 	if (hMesh) {
 		LoadMeshFromHandle(hMesh);
 		oapiDeleteMesh(hMesh);
+	}
+	else {
+		LogErr("Failed to load [%s]", fname);
 	}
 
 	MeshCatalog.insert(this);
@@ -319,6 +348,7 @@ D3D9Mesh::D3D9Mesh(const MESHGROUPEX *pGroup, const MATERIAL *pMat, SurfNative *
 D3D9Mesh::D3D9Mesh(MESHHANDLE hMesh, const D3D9Mesh &hTemp)
 {
 	Null(oapiGetMeshFilename(hMesh));
+	hOapiMesh = hMesh;
 
 	// Confirm the source is global template
 	assert(hTemp.bIsTemplate == true);
@@ -330,11 +360,14 @@ D3D9Mesh::D3D9Mesh(MESHHANDLE hMesh, const D3D9Mesh &hTemp)
 	strcpy_s(name, ARRAYSIZE(name), hTemp.name);
 
 	// Use Template's Vertex Data directly, no need for a local copy unless locally modified. 
-	pBuf = hTemp.pBuf;
+	pBuf = hTemp.pBuf->Reference();
 
 	BBox = hTemp.BBox;
 	MaxVert = hTemp.MaxVert;
 	MaxFace = hTemp.MaxFace;
+	MeshFlags = hTemp.MeshFlags;
+	Flags = hTemp.Flags;
+
 	// Clone group records from a tremplate
 	Grp = new GROUPREC[nGrp];
 	memcpy(Grp, hTemp.Grp, sizeof(GROUPREC)*nGrp);
@@ -390,9 +423,16 @@ void D3D9Mesh::Release()
 	SAFE_DELETEA(Tex);
 	SAFE_DELETEA(Mtrl);
 	SAFE_DELETEA(pGrpTF);
-	SAFE_DELETEA(pTune);
 
-	if (pBuf) if (pBuf->IsLocalTo(this)) delete pBuf;
+	if (pBuf) if (pBuf->Release()) delete pBuf;
+	pBuf = nullptr;
+
+	for (auto x : BakedLights) {
+		for (auto y : x.second.pMap) SAFE_RELEASE(y);
+		for (auto y : x.second.pSunAO) SAFE_RELEASE(y);
+		SAFE_RELEASE(x.second.pCombined);
+		SAFE_RELEASE(x.second.pSunAOComb);
+	}
 }
 
 
@@ -402,6 +442,7 @@ void D3D9Mesh::Release()
 
 void D3D9Mesh::ReLoadMeshFromHandle(MESHHANDLE hMesh)
 {
+	hOapiMesh = hMesh;
 	const char* meshn = oapiGetMeshFilename(hMesh);
 	strcpy_s(name, 128, meshn ? meshn : "???");
 
@@ -425,7 +466,7 @@ void D3D9Mesh::ReLoadMeshFromHandle(MESHHANDLE hMesh)
 
 	if (MaxVert == 0 || MaxFace == 0) {
 		if (pBuf) if (pBuf->IsLocalTo(this)) {
-			delete pBuf; pBuf = NULL;
+			if (pBuf->Release()) SAFE_DELETE(pBuf);
 		}
 		return;
 	}
@@ -449,6 +490,7 @@ void D3D9Mesh::ReLoadMeshFromHandle(MESHHANDLE hMesh)
 	for (DWORD i = 0; i<nGrp; i++) CopyVertices(&Grp[i], oapiMeshGroupEx(hMesh, i));
 
 	pGrpTF = new D3DXMATRIX[nGrp];
+	MeshFlags = oapiGetMeshFlags(hMesh);
 
 	D3DXMatrixIdentity(&mTransform);
 	D3DXMatrixIdentity(&mTransformInv);
@@ -459,11 +501,238 @@ void D3D9Mesh::ReLoadMeshFromHandle(MESHHANDLE hMesh)
 	pBuf->Map(pDev);
 }
 
+// ===========================================================================================
+//
+const char* D3D9Mesh::GetDirName(int i, int v)
+{
+	static const char* names[] = { "up", "down", "left", "right", "fwd", "aft" };
+	static const char* named[] = { "+y", "-y", "-x", "+x", "+z", "-z" };
+	if (v == 0) return names[i];
+	return named[i];
+}
+
+// ===========================================================================================
+//
+FVECTOR3 D3D9Mesh::GetDir(int i)
+{
+	switch (i) {
+	case 0: return FVECTOR3(0,  1, 0); // Up
+	case 1: return FVECTOR3(0, -1, 0); // Down
+	case 2: return FVECTOR3(-1, 0, 0); // Left
+	case 3: return FVECTOR3( 1, 0, 0); // Right
+	case 4: return FVECTOR3(0, 0,  1); // Fwd
+	case 5: return FVECTOR3(0, 0, -1); // Aft
+	}
+	return FVECTOR3(0, 0, 1);
+}
+
+// ===========================================================================================
+//
+void D3D9Mesh::ClearBake(int i)
+{
+	for (int k = 0; k < 16; k++) BakedLights[i].pMap[k] = NULL;
+	for (int k = 0; k < 6; k++) BakedLights[i].pSunAO[k] = NULL;
+	BakedLights[i].pCombined = NULL;
+	BakedLights[i].pSunAOComb = NULL;
+}
+
+// ===========================================================================================
+//
+void D3D9Mesh::LoadBakedLights()
+{
+	if (BakedLights.size()) return;	// Already Loaded, skip the rest
+	char id[32];
+
+	for (int i = 0; i < nTex; i++)
+	{
+		if (!Tex[i]) continue; // No base texture, pick next
+
+		for (int j = 0; j < 16; j++)
+		{
+			sprintf_s(id, "_bkl%d", j);		
+			LPDIRECT3DTEXTURE9 pTex = NatLoadSpecialTexture(Tex[i]->GetPath(), id, true);
+			if (pTex) {
+				if (BakedLights.find(i) == BakedLights.end()) ClearBake(i);
+				BakedLights[i].pMap[j] = pTex;
+			}
+		}
+
+		if (Config->ExpVCLight == 0)
+		{
+			for (int j = 0; j < 6; j++)
+			{
+				sprintf_s(id, " baked sunlight %s", GetDirName(j, 0));
+				LPDIRECT3DTEXTURE9 pTex = NatLoadSpecialTexture(Tex[i]->GetPath(), id, true);
+				if (pTex) {
+					if (BakedLights.find(i) == BakedLights.end()) ClearBake(i);
+					BakedLights[i].pSunAO[j] = pTex;
+				}
+				else {
+					sprintf_s(id, "_bs%s", GetDirName(j, 1));
+					LPDIRECT3DTEXTURE9 pTex = NatLoadSpecialTexture(Tex[i]->GetPath(), id, true);
+					if (pTex) {
+						if (BakedLights.find(i) == BakedLights.end()) ClearBake(i);
+						BakedLights[i].pSunAO[j] = pTex;
+					}
+				}
+			}
+		}
+	}
+
+	// Construct render surface for all combined maps 
+	for (auto& a : BakedLights) {
+		int i = a.first;
+		if (Tex[i]) {
+			HR(D3DXCreateTexture(pDev, Tex[i]->GetWidth(), Tex[i]->GetHeight(), 0, D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &a.second.pCombined));
+			HR(D3DXCreateTexture(pDev, Tex[i]->GetWidth(), Tex[i]->GetHeight(), 0, D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &a.second.pSunAOComb));
+		}
+	}
+
+	bli = BakedLights.begin();
+}
+
+
+// ===========================================================================================
+//
+void D3D9Mesh::BakeLights(ImageProcessing* pBaker, const FVECTOR3* BakedLightsControl)
+{
+	if (!pBaker->IsOK()) return; // Baker not initialized
+	if (DefShader != SHADER_BAKED_VC) return; // Not supported by shader
+	if (BakedLights.size() == 0) return; // Nothing to bake
+
+	DWORD flags = IPF_POINT | IPF_CLAMP;
+	FVECTOR3 control[16];
+
+	pBaker->Activate("PSMain");
+
+	for (auto x : BakedLights)
+	{
+		int slot = 0;
+		for (int i = 0; i < 16; i++)
+		{
+			auto y = x.second.pMap[i];
+			if (y)
+			{
+				pBaker->SetTextureNative(slot, y, flags);
+				control[slot] = BakedLightsControl[i];
+				slot++;
+			}
+		}
+
+		pBaker->SetFloat("fControl", control, slot * sizeof(FVECTOR3));
+		pBaker->SetInt("iCount", slot);
+
+		LPDIRECT3DSURFACE9 pSrf = NULL;
+
+		if (x.second.pCombined)
+		{
+			if (x.second.pCombined->GetSurfaceLevel(0, &pSrf) == S_OK)
+			{
+				pBaker->SetOutputNative(0, pSrf);
+				pBaker->Execute(true);
+				SAFE_RELEASE(pSrf);
+			}
+		}
+	}
+}
+
+
+// ===========================================================================================
+//
+void D3D9Mesh::BakeAO(ImageProcessing* pBaker, const FVECTOR3 &vSun, const LVLH &lvlh, const LPDIRECT3DTEXTURE9 pIrrad)
+{
+	if (!pBaker->IsOK()) return; // Baker not initialized
+	if (DefShader != SHADER_BAKED_VC) return; // Not supported by shader
+	if (BakedLights.size() == 0) return; // Nothing to bake
+
+	DWORD flags = IPF_POINT | IPF_CLAMP;
+	FVECTOR3 control[6];
+	FVECTOR3 ParTexCoord[6];
+	bool bSE[6];
+	float fShine = 1.0f;
+	bool bShine = true;
+
+	// Compute texcoords for Irradiance lookup for prime directions
+	//
+	for (int i = 0; i < 6; i++) {
+		FVECTOR3 DirL = GetDir(i);
+		float z = dot(lvlh.Up, DirL);	// lvlh is in a local vessel frame
+		FVECTOR2 p = FVECTOR2(dot(lvlh.East, DirL), dot(lvlh.North, DirL)) / (1.0f + abs(z));
+		p *= FVECTOR2(0.2273f, 0.4545f);
+		ParTexCoord[i] = FVECTOR3(p.x, p.y, z);
+	}
+
+	pBaker->Activate("PSSunAO");
+
+	// Compute sunligh intensity factors for prime directions
+	//
+	for (int i = 0; i < 6; i++)
+	{
+		bSE[i] = false;
+		control[i] = 0.0f;
+
+		if (DebugControls::IsActive())
+			if ((DebugControls::ambdir != i) && (DebugControls::ambdir != -1)) continue;
+
+		auto tex = bli->second.pSunAO[i];
+		bSE[i] = (tex != NULL);
+		if (tex)
+		{
+			pBaker->SetTextureNative(i, tex, flags);
+			control[i] = saturate(dot(GetDir(i), vSun));
+			control[i] *= control[i];
+		}	
+	}
+
+	if (DebugControls::IsActive()) {
+		if (DebugControls::debugFlags & DBG_FLAGS_NOSUNAMB)
+			for (int i = 0; i < 6; i++) control[i] = 0;
+		if (DebugControls::debugFlags & DBG_FLAGS_NOPLNAMB)
+			fShine = 0.0f, bShine = false;
+	}
+
+	if (pIrrad == nullptr) fShine = 0.0f, bShine = false;
+
+	pBaker->SetTextureNative("tIrrad", pIrrad, IPF_LINEAR | IPF_CLAMP);
+	pBaker->SetFloat("fControl", control, sizeof(control));
+	pBaker->SetFloat("vParTexPos", ParTexCoord, sizeof(ParTexCoord));
+	pBaker->SetFloat("fShine", &fShine, sizeof(fShine));
+	pBaker->SetBool("bEnabled", bSE, sizeof(bSE));
+	pBaker->SetBool("bShine", &bShine, sizeof(bShine));
+
+	LPDIRECT3DSURFACE9 pSrf = NULL;
+
+	if (bli->second.pSunAOComb)
+	{
+		if (bli->second.pSunAOComb->GetSurfaceLevel(0, &pSrf) == S_OK)
+		{
+			pBaker->SetOutputNative(0, pSrf);
+			pBaker->Execute(true);
+			SAFE_RELEASE(pSrf);
+		}
+	}
+
+	bli++;
+	if (bli == BakedLights.end()) bli = BakedLights.begin();
+}
+
+
+// ===========================================================================================
+//
+LPDIRECT3DTEXTURE9 D3D9Mesh::GetCombinedMap(int tex_idx)
+{
+	if (tex_idx < 0 ) for (auto a : BakedLights) if (a.second.pCombined) return a.second.pCombined;
+	auto it = BakedLights.find(tex_idx);
+	if (it != BakedLights.end()) return it->second.pCombined;
+	return NULL;
+}
+
 
 // ===========================================================================================
 //
 void D3D9Mesh::LoadMeshFromHandle(MESHHANDLE hMesh, D3DXVECTOR3 *reorig, float *scale)
 {
+	hOapiMesh = hMesh;
 	const char* meshn = oapiGetMeshFilename(hMesh);
 	strcpy_s(name, 128, meshn ? meshn : "???");
 
@@ -495,6 +764,7 @@ void D3D9Mesh::LoadMeshFromHandle(MESHHANDLE hMesh, D3DXVECTOR3 *reorig, float *
 	for (DWORD i = 0; i<nGrp; i++) CopyVertices(&Grp[i], oapiMeshGroupEx(hMesh, i), reorig, scale);
 
 	pGrpTF = new D3DXMATRIX[nGrp];
+	MeshFlags = oapiGetMeshFlags(hMesh);
 
 	D3DXMatrixIdentity(&mTransform);
 	D3DXMatrixIdentity(&mTransformInv);
@@ -1041,6 +1311,15 @@ const D3D9Mesh::GROUPREC *D3D9Mesh::GetGroup(DWORD idx) const
 
 // ===========================================================================================
 //
+D3D9Mesh::GROUPREC* D3D9Mesh::GetGroup(DWORD idx)
+{
+	if (!IsOK()) return NULL;
+	if (idx < nGrp) return &Grp[idx];
+	return NULL;
+}
+
+// ===========================================================================================
+//
 const D3D9MatExt * D3D9Mesh::GetMaterial(DWORD idx) const
 {
 	if (idx >= nMtrl) return NULL;
@@ -1274,36 +1553,19 @@ int D3D9Mesh::GetMaterialEx(DWORD idx, MatProp mid, FVECTOR4* value)
 
 // ===========================================================================================
 //
-bool D3D9Mesh::GetTexTune(D3D9Tune *pT, DWORD idx) const
-{
-	if (idx<nTex && idx!=0) {
-		if (!pTune) D3D9TuneInit(pT);
-		else memcpy(pT, &pTune[idx], sizeof(D3D9Tune));
-		return true;
-	}
-	return false;
-}
-
-// ===========================================================================================
-//
-void D3D9Mesh::SetTexTune(const D3D9Tune *pT, DWORD idx)
-{
-	if (idx < nTex && idx != 0) {
-		if (!pTune) {
-			pTune = new D3D9Tune[nTex];
-			for (DWORD i = 0; i < nTex; i++) D3D9TuneInit(&pTune[i]);
-		}
-		memcpy(&pTune[idx], pT, sizeof(D3D9Tune));
-	}
-}
-
-// ===========================================================================================
-//
-void D3D9Mesh::SetAmbientColor(D3DCOLOR c)
+void D3D9Mesh::SetAmbientColor(const FVECTOR3& c)
 {
 	_TRACE;
 	if (!IsOK()) return;
 	cAmbient = c;
+}
+
+// ===========================================================================================
+//
+const FVECTOR3& D3D9Mesh::GetAmbientColor()
+{
+	_TRACE;
+	return cAmbient;
 }
 
 // ===========================================================================================
@@ -1416,6 +1678,25 @@ void D3D9Mesh::CheckMeshStatus()
 		bIsReflective = true;
 		for (DWORD g = 0; g < nGrp; g++) Grp[g].Shader = SHADER_METALNESS;
 	}
+
+	if (DefShader == SHADER_BAKED_VC) {
+		bIsReflective = true;
+		for (DWORD g = 0; g < nGrp; g++) Grp[g].Shader = SHADER_BAKED_VC;
+	}
+}
+
+
+// ===========================================================================================
+//
+void D3D9Mesh::SetDefaultShader(WORD shader)
+{
+	DefShader = shader;
+	bMtrlModidied = true;
+	CheckMeshStatus();
+
+	if (shader == SHADER_BAKED_VC) {
+		LoadBakedLights();
+	}
 }
 
 
@@ -1426,16 +1707,56 @@ void D3D9Mesh::ConfigureAtmo()
 	//LogSunLight(sunLight);
 	float x = 1.0f - saturate(max(sunLight.Color.r, sunLight.Color.b) * 2.0f);
 	FX->SetFloat(eNight, x);
+	if (DebugControls::IsActive() && DebugControls::debugFlags & DBG_FLAGS_NODYNSUN)
+		sunLight.Color = sunLight.Ambient = 0;
 	FX->SetValue(eSun, &sunLight, sizeof(D3D9Sun));
+}
+
+
+// ===========================================================================================
+// Setup shadow map samplers and textures
+//
+void D3D9Mesh::ConfigureShadows()
+{
+	for (int i = 0; i < SHM_CASCADE_COUNT; i++)
+	{
+		int idx = 13 + i; // Sampler index
+		HR(pDev->SetSamplerState(idx, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP));
+		HR(pDev->SetSamplerState(idx, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP));
+		HR(pDev->SetSamplerState(idx, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP));	
+		HR(pDev->SetSamplerState(idx, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR));
+		HR(pDev->SetSamplerState(idx, D3DSAMP_MINFILTER, D3DTEXF_LINEAR));
+		HR(pDev->SetSamplerState(idx, D3DSAMP_MIPFILTER, D3DTEXF_NONE));
+		HR(pDev->SetTexture(idx, pShadowMap[i]));
+	}
+	HR(FX->SetValue(D3D9Effect::eSHDSubRect, ShdSubRect, sizeof(ShdSubRect)));
+}
+
+
+// ===========================================================================================
+// static:
+void D3D9Mesh::SetShadows(const SHADOWMAP *sprm)
+{
+	if (sprm) {
+		for (int i = 0; i < SHM_CASCADE_COUNT; i++) {
+			pShadowMap[i] = sprm->Map(i);
+			ShdSubRect[i] = sprm->SubrectTF[i];
+		}
+	}
+	else {
+		for (int i = 0; i < SHM_CASCADE_COUNT; i++) {
+			pShadowMap[i] = NULL;
+			ShdSubRect[i] = { 0,0,0,0 };
+		}
+	}
 }
 
 
 // ================================================================================================
 // This is a rendering routine for a Exterior Mesh, non-spherical moons/asteroids
 //
-void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *pEnv, int nEnv)
+void D3D9Mesh::Render(const LPD3DXMATRIX pW, const ENVCAMREC* em, int iTech)
 {
-
 	_TRACE;
 	
 	if (!IsOK()) return;
@@ -1466,9 +1787,9 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 		selmsh = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDMESH);
 		selgrp = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDGROUP);
 		displ  = *(DWORD*)gc->GetConfigParam(CFGPRM_GETDISPLAYMODE);
-		bActiveVisual = (pCurrentVisual==DebugControls::GetVisual());
+		bActiveVisual = (g_pCurrentVisual == DebugControls::GetVisual());
 		if (displ>0 && !bActiveVisual) return;
-		if ((displ==2 || displ==3) && uCurrentMesh!=selmsh) return;
+		if ((displ==2 || displ==3) && g_uCurrentMesh!=selmsh) return;
 	}
 
 	Scene *scn = gc->GetScene();
@@ -1479,12 +1800,14 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 	bool bGroupCull = true;
 	bool bUpdateFlow = true;
 	bool bShadowProjection = false;
+	bool bVirtualCockpit = false;
 
 
 
 	switch (iTech) {
 		case RENDER_VC:
 			EnablePlanetGlow(false);
+			bVirtualCockpit = true;
 			break;
 		case RENDER_BASE:
 			EnablePlanetGlow(false);
@@ -1508,6 +1831,7 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 	}
 
 	HR(D3D9Effect::FX->SetBool(D3D9Effect::eBaseBuilding, bShadowProjection));
+	HR(D3D9Effect::FX->SetBool(D3D9Effect::eCockpit, bVirtualCockpit));
 
 	D3DXVECTOR4 Field;
 	D3DXMATRIX mWorldView,  q;
@@ -1535,23 +1859,25 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 	pDev->SetStreamSource(0, pBuf->pVB, 0, sizeof(NMVERTEX));
 	pDev->SetIndices(pBuf->pIB);
 
+	ConfigureShadows();
+
 	if (flags&DBG_FLAGS_DUALSIDED) pDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
 	FX->SetTechnique(eVesselTech);
 	FX->SetBool(eFresnel, false);
-	FX->SetBool(eEnvMapEnable, false);
-	FX->SetBool(eTuneEnabled, false);
 	FX->SetBool(eLightsEnabled, false);
 	FX->SetBool(eOITEnable, false);
 	FX->SetVector(eColor, ptr(D3DXVECTOR4(0, 0, 0, 0)));
+	FX->SetValue(eVCAmbient, &cAmbient, sizeof(FVECTOR3));
 
 	ConfigureAtmo();
-
-	if (DebugControls::IsActive()) if (pTune) FX->SetBool(eTuneEnabled, true);
 
 
 	TexFlow FC;	reset(FC);
 
+
+	// Setup Local lights -------------------------------------------
+	//
 	const D3D9Light *pLights = gc->GetScene()->GetLights();
 	int nSceneLights = gc->GetScene()->GetLightCount();
 
@@ -1597,7 +1923,23 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 	FX->SetValue(eLights, Locals, sizeof(LightStruct) * Config->MaxLights());
 
 
-	if (nEnv >= 1 && pEnv[0]) FX->SetTexture(eEnvMapA, pEnv[0]);
+	// Setup Env Maps -------------------------------------------
+	//
+	if (em && em->pCube && em->pIrrad) { 
+		FX->SetBool(eEnvMapEnable, true);
+		FX->SetTexture(eEnvMapA, em->pCube);
+		FX->SetTexture(eIrradMap, em->pIrrad);
+	}
+	else {
+		FX->SetBool(eEnvMapEnable, false);
+	}
+
+	bool bNoAmbient = (Config->ExpVCLight == 1);
+
+	/*if (DebugControls::IsActive()) {
+		bNoAmbient = (flags & DBG_FLAGS_NOSUNAMB) != 0 & (flags & DBG_FLAGS_NOPLNAMB) != 0;
+	}*/
+
 
 
 	UINT numPasses = 0;
@@ -1606,6 +1948,7 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 	WORD CurrentShader = SHADER_NULL;
 
 	bool bRefl = true;
+	int iEnvCam = -1;
 
 	for (DWORD g=0; g<nGrp; g++) {
 
@@ -1657,12 +2000,12 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 				FX->SetVector(eColor, ptr(D3DXVECTOR4(0, 0, 0, 0)));
 
 				if (flags&DBG_FLAGS_HLMESH) {
-					if (uCurrentMesh==selmsh) {
+					if (g_uCurrentMesh==selmsh) {
 						FX->SetVector(eColor, ptr(D3DXVECTOR4(0.0f, 0.0f, 0.5f, 0.5f)));
 					}
 				}
-				if (flags&DBG_FLAGS_HLGROUP) {
-					if (g==selgrp && uCurrentMesh==selmsh) {
+				if (flags&DBG_FLAGS_HLGROUP) {				
+					if (g == selgrp && g_uCurrentMesh == selmsh) {
 						FX->SetVector(eColor, ptr(D3DXVECTOR4(0.0f, 0.5f, 0.0f, 0.5f)));
 					}
 				}
@@ -1673,17 +2016,15 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 		// ---------------------------------------------------------------------------------------------------------
 		//
 		if (Tex[ti] != old_tex) {
-			if (Tex[ti] == NULL) {
-				reset(FC);
-				bUpdateFlow = true;
-			}
+			reset(FC);
+			bUpdateFlow = true;
 		}
 
 		if (Tex[ti]==NULL) bTextured = false, old_tex = NULL;
 		else bTextured = true;
 
 
-
+		
 		// Setup Textures and Normal Maps ==========================================================================
 		//
 		if (bTextured) {
@@ -1696,18 +2037,11 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 
 				FX->SetTexture(eTex0, Tex[ti]->GetTexture());
 
-				bUpdateFlow = true;	// Fix this later
-
 				if (CurrentShader == SHADER_LEGACY) {
 					if (tni && Grp[g].TexMixEx[0] < 0.5f) tni = 0;
 					if (tni && Tex[tni]) FX->SetTexture(eEmisMap, Tex[tni]->GetTexture());
 				}
 				else {
-
-					if (DebugControls::IsActive()) if (pTune) {
-						FX->SetValue(eTune, &pTune[ti], sizeof(D3D9Tune));
-					}
-
 					LPDIRECT3DTEXTURE9 pTransl = NULL;
 					LPDIRECT3DTEXTURE9 pTransm = NULL;
 					LPDIRECT3DTEXTURE9 pMetl = NULL;
@@ -1729,7 +2063,9 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 					if (pSpec) FX->SetTexture(eSpecMap, pSpec);
 					if (pRefl) FX->SetTexture(eReflMap, pRefl);
 
-					if (CurrentShader == SHADER_ADV || CurrentShader == SHADER_METALNESS)
+					if (CurrentShader == SHADER_ADV
+						|| CurrentShader == SHADER_METALNESS
+						|| CurrentShader == SHADER_BAKED_VC)
 					{
 						pTransl = Tex[ti]->GetMap(MAP_TRANSLUCENCE);
 						pTransm = Tex[ti]->GetMap(MAP_TRANSMITTANCE);
@@ -1747,6 +2083,23 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 						FC.Transl = false;
 						FC.Transm = false;
 						FC.Metl = false;
+					}
+
+					if (CurrentShader == SHADER_BAKED_VC)
+					{
+						auto bm = BakedLights.find(ti);
+
+						LPDIRECT3DTEXTURE9 pAmbi = Tex[ti]->GetMap(MAP_AMBIENT);
+						LPDIRECT3DTEXTURE9 pComb = (bm == BakedLights.end() ? NULL : bm->second.pCombined);
+						LPDIRECT3DTEXTURE9 pSun = (bm == BakedLights.end() ? NULL : bm->second.pSunAOComb);
+
+						if (pAmbi) FX->SetTexture(eAmbientMap, pAmbi);
+						if (pComb) FX->SetTexture(eCombinedMap, pComb);
+						if (pSun)  FX->SetTexture(eCombSunMap, pSun);
+
+						FC.Baked = (pComb != NULL);
+						FC.BakedAO = (pAmbi != NULL);
+						FC.BakedAmb = (pSun != NULL) & !bNoAmbient;
 					}
 
 					FC.Emis = (pEmis != NULL);
@@ -1836,16 +2189,18 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 		FX->SetBool(eOITEnable, bOIT);
 		FX->SetBool(eTextured, bTextured);
 		FX->SetBool(eFullyLit, bNoL);
-		FX->SetBool(eNoColor,  bNoC);
 		FX->SetBool(eSwitch, bPBR);
 		FX->SetBool(eRghnSw, bRGH);
+
+		if (bNoC) FX->SetValue(eNoColor, &D3DXVECTOR3(1, 1, 1), sizeof(D3DXVECTOR3));
+		else FX->SetValue(eNoColor, &D3DXVECTOR3(0, 0, 0), sizeof(D3DXVECTOR3));
 
 		// Update envmap and fresnel status as required
 		if (bRefl) {
 			bFRS = (Grp[g].PBRStatus & 0x1E) >= 0x10;
 			FX->SetBool(eFresnel, bFRS);
 			if (IsReflective()) {			
-				bENV = ((Grp[g].PBRStatus & 0x1E) >= 0xA) | (Grp[g].Shader == SHADER_METALNESS);
+				bENV = ((Grp[g].PBRStatus & 0x1E) >= 0xA) | (Grp[g].Shader == SHADER_METALNESS) | (Grp[g].Shader == SHADER_BAKED_VC);
 				FX->SetBool(eEnvMapEnable, bENV);
 			}
 		}
@@ -1860,7 +2215,7 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 		//
 		if (DebugControls::IsActive()) {
 
-			if ((bActiveVisual) && (g == selgrp) && (uCurrentMesh == selmsh)) {
+			if ((bActiveVisual) && (g == selgrp) && (g_uCurrentMesh == selmsh)) {
 
 				bool bAdd = (Grp[g].UsrFlag & 0x08) != 0;
 				bool bNoS = (Grp[g].UsrFlag & 0x01) != 0;
@@ -1868,9 +2223,9 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 				static const char *YesNo[2] = { "No", "Yes" };
 				static const char *LPW[2] = { "Legacy", "PBR" };
 				static const char *RGH[2] = { "Disabled", "Enabled" };
-				static const char *Shaders[7] = { "PBR", "PBR-ADV", "FAST", "XR2", "METALNESS", "SPECULAR", "???"};
+				static const char *Shaders[7] = { "PBR", "PBR-ADV", "FAST", "XR2", "METALNESS", "BAKED_VC", "???"};
 
-				DebugControls::Append("MeshIdx = %d, GrpIdx = %d\n", uCurrentMesh, g);
+				DebugControls::Append("MeshIdx = %d, GrpIdx = %d\n", g_uCurrentMesh, g);
 				DebugControls::Append("MtrlIdx = %d, TexIdx = %d\n", Grp[g].MtrlIdx, Grp[g].TexIdx);
 				DebugControls::Append("FaceCnt = %d, VtxCnt = %d\n", Grp[g].nFace, Grp[g].nVert);
 
@@ -1903,6 +2258,12 @@ void D3D9Mesh::Render(const LPD3DXMATRIX pW, int iTech, LPDIRECT3DCUBETEXTURE9 *
 					if (FC.Refl) DebugControls::Append("refl ");
 					if (FC.Transl) DebugControls::Append("transl ");
 					if (FC.Transm) DebugControls::Append("transm ");
+					DebugControls::Append("]\n");
+				}
+
+				if (CurrentShader == SHADER_BAKED_VC) {
+					DebugControls::Append("BakedLights = [ ");
+					for (auto& a : BakedLights) DebugControls::Append(" %d", a.first);
 					DebugControls::Append("]\n");
 				}
 
@@ -2007,7 +2368,6 @@ void D3D9Mesh::RenderSimplified(const LPD3DXMATRIX pW, LPDIRECT3DCUBETEXTURE9 *p
 	FX->SetTechnique(eVesselTech);
 	FX->SetBool(eFresnel, false);
 	FX->SetBool(eEnvMapEnable, false);
-	FX->SetBool(eTuneEnabled, false);
 	FX->SetBool(eLightsEnabled, false);
 	FX->SetVector(eColor, ptr(D3DXVECTOR4(0, 0, 0, 0)));
 	FX->SetMatrix(eW, pW);
@@ -2181,9 +2541,11 @@ void D3D9Mesh::RenderSimplified(const LPD3DXMATRIX pW, LPDIRECT3DCUBETEXTURE9 *p
 		FX->SetBool(eOITEnable, bOIT);
 		FX->SetBool(eTextured, bTextured);
 		FX->SetBool(eFullyLit, bNoL);
-		FX->SetBool(eNoColor, bNoC);
 		FX->SetBool(eSwitch, bPBR);
 		FX->SetBool(eRghnSw, bRGH);
+
+		if (bNoC) FX->SetValue(eNoColor, &D3DXVECTOR3(1, 1, 1), sizeof(D3DXVECTOR3));
+		else FX->SetValue(eNoColor, &D3DXVECTOR3(0, 0, 0), sizeof(D3DXVECTOR3));
 
 
 		// Update envmap and fresnel status as required
@@ -2242,9 +2604,9 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 		selmsh = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDMESH);
 		selgrp = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDGROUP);
 		displ = *(DWORD*)gc->GetConfigParam(CFGPRM_GETDISPLAYMODE);
-		bActiveVisual = (pCurrentVisual == DebugControls::GetVisual());
+		bActiveVisual = (g_pCurrentVisual == DebugControls::GetVisual());
 		if (displ>0 && !bActiveVisual) return;
-		if ((displ == 2 || displ == 3) && uCurrentMesh != selmsh) return;
+		if ((displ == 2 || displ == 3) && g_uCurrentMesh != selmsh) return;
 	}
 
 	Scene *scn = gc->GetScene();
@@ -2255,9 +2617,11 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 	bool bGroupCull = true;
 	bool bUpdateFlow = true;
 	bool bShadowProjection = false;
+	bool bVirtualCockpit = false;
 
 	switch (iTech) {
 		case RENDER_VC:
+			bVirtualCockpit = true;
 			EnablePlanetGlow(false);
 			break;
 		case RENDER_BASE:
@@ -2282,6 +2646,7 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 	}
 
 	HR(D3D9Effect::FX->SetBool(D3D9Effect::eBaseBuilding, bShadowProjection));
+	HR(D3D9Effect::FX->SetBool(D3D9Effect::eCockpit, bVirtualCockpit));
 
 	D3DXVECTOR4 Field;
 	D3DXMATRIX mWorldView, q;
@@ -2314,14 +2679,10 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 
 
 	FX->SetTechnique(eVesselTech);
-	FX->SetBool(eTuneEnabled, false);
 	FX->SetBool(eLightsEnabled, false);
 	FX->SetVector(eColor, ptr(D3DXVECTOR4(0, 0, 0, 0)));
 
 	ConfigureAtmo();
-
-	if (DebugControls::IsActive()) if (pTune) FX->SetBool(eTuneEnabled, true);
-
 	TexFlow FC;	reset(FC);
 
 	const D3D9Light *pLights = gc->GetScene()->GetLights();
@@ -2391,12 +2752,12 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 				FX->SetVector(eColor, ptr(D3DXVECTOR4(0, 0, 0, 0)));
 
 				if (flags&DBG_FLAGS_HLMESH) {
-					if (uCurrentMesh == selmsh) {
+					if (g_uCurrentMesh == selmsh) {
 						FX->SetVector(eColor, ptr(D3DXVECTOR4(0.0f, 0.0f, 0.5f, 0.5f)));
 					}
 				}
 				if (flags&DBG_FLAGS_HLGROUP) {
-					if (g == selgrp && uCurrentMesh == selmsh) {
+					if (g == selgrp && g_uCurrentMesh == selmsh) {
 						FX->SetVector(eColor, ptr(D3DXVECTOR4(0.0f, 0.5f, 0.0f, 0.5f)));
 					}
 				}
@@ -2425,10 +2786,6 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 		if (bTextured) {
 
 			if (Tex[ti] != old_tex) {
-
-				D3D9Stats.Mesh.TexChanges++;
-
-				if (DebugControls::IsActive()) if (pTune) FX->SetValue(eTune, &pTune[ti], sizeof(D3D9Tune));
 
 				old_tex = Tex[ti];
 				FX->SetTexture(eTex0, Tex[ti]->GetTexture());
@@ -2515,8 +2872,10 @@ void D3D9Mesh::RenderFast(const LPD3DXMATRIX pW, int iTech)
 		//
 		FX->SetBool(eTextured, bTextured);
 		FX->SetBool(eFullyLit, (Grp[g].UsrFlag & 0x4) != 0);
-		FX->SetBool(eNoColor, (Grp[g].UsrFlag & 0x10) != 0);
 		FX->SetBool(eOITEnable, (Grp[g].UsrFlag & 0x20) != 0);
+
+		if ((Grp[g].UsrFlag & 0x10) != 0) FX->SetValue(eNoColor, &D3DXVECTOR3(1, 1, 1), sizeof(D3DXVECTOR3));
+		else FX->SetValue(eNoColor, &D3DXVECTOR3(0, 0, 0), sizeof(D3DXVECTOR3));
 
 		FX->CommitChanges();
 
@@ -2730,7 +3089,7 @@ void D3D9Mesh::RenderBaseTile(const LPD3DXMATRIX pW)
 
 // ================================================================================================
 //
-void D3D9Mesh::RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, int opt)
+void D3D9Mesh::RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, int opt, bool bNoCull)
 {
 	if (!IsOK()) return;
 
@@ -2740,7 +3099,7 @@ void D3D9Mesh::RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, in
 
 	MeshShader* pShader = nullptr;
 	
-	MeshShader::vs_const.mVP = *pVP;
+	MeshShader::vs_const.mVP = pVP ? *pVP : FMATRIX4();
 
 	D3DXMatrixIdentity(MeshShader::vs_const.mW);
 	
@@ -2804,7 +3163,13 @@ void D3D9Mesh::RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, in
 		if (pShader->hPSB) pShader->SetPSConstants(pShader->hPSB, &MeshShader::ps_bools, sizeof(MeshShader::ps_bools));
 		pShader->UpdateTextures();
 
+		DWORD oc;
+		if (bNoCull) {
+			pDev->GetRenderState(D3DRS_CULLMODE, &oc);
+			pDev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		}
 		pDev->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, Grp[g].VertOff, 0, Grp[g].nVert, Grp[g].IdexOff, Grp[g].nFace);
+		if (bNoCull) pDev->SetRenderState(D3DRS_CULLMODE, oc);
 	}
 }
 
@@ -2976,10 +3341,10 @@ void D3D9Mesh::RenderBoundingBox(const LPD3DXMATRIX pW)
 	DWORD flags  = *(DWORD*)gc->GetConfigParam(CFGPRM_GETDEBUGFLAGS);
 	DWORD selmsh = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDMESH);
 	DWORD selgrp = *(DWORD*)gc->GetConfigParam(CFGPRM_GETSELECTEDGROUP);
-	bool  bSel   =  (uCurrentMesh==selmsh);
+	bool  bSel   =  (g_uCurrentMesh==selmsh);
 
 
-	if (flags&(DBG_FLAGS_SELVISONLY|DBG_FLAGS_SELMSHONLY|DBG_FLAGS_SELGRPONLY) && DebugControls::GetVisual()!=pCurrentVisual) return;
+	if (flags&(DBG_FLAGS_SELVISONLY|DBG_FLAGS_SELMSHONLY|DBG_FLAGS_SELGRPONLY) && DebugControls::GetVisual()!=g_pCurrentVisual) return;
 	if (flags&DBG_FLAGS_SELMSHONLY && !bSel) return;
 	if (flags&DBG_FLAGS_SELGRPONLY && !bSel) return;
 
@@ -3201,7 +3566,7 @@ float D3D9Mesh::GetBoundingSphereRadius()
 
 // ===========================================================================================
 //
-D3D9Pick D3D9Mesh::Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DXVECTOR3 *vDir)
+D3D9Pick D3D9Mesh::Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DXVECTOR3 *vDir, const PickProp *p)
 {
 	D3D9Pick result;
 	result.dist  = 1e30f;
@@ -3209,6 +3574,8 @@ D3D9Pick D3D9Mesh::Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DX
 	result.vObj  = NULL;
 	result.group = -1;
 	result.idx = -1;
+
+	if (p->pMesh) if (p->pMesh != this) return result;
 
 	if (!pBuf->pGBSys || !pBuf->pIBSys) {
 		LogErr("D3D9Mesh::Pick() Failed: No Geometry Available");
@@ -3270,9 +3637,9 @@ D3D9Pick D3D9Mesh::Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DX
 
 			D3DXVec3Cross(&cp, ptr(_c - _b), ptr(_a - _b));
 
-			if (D3DXVec3Dot(&cp, &dir)<0) {
+			if ((D3DXVec3Dot(&cp, &dir)<0) || p->bDualSided) {
 				if (D3DXIntersectTri(&_c, &_b, &_a, &pos, &dir, &u, &v, &dst)) {
-					if (dst > 0.1f) {
+					if (dst > p->fnear) {
 						if (dst < result.dist) {
 							result.dist = dst;
 							result.group = int(g);

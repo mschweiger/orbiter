@@ -120,7 +120,8 @@ public:
 	 * \return Mesh handle
 	 * \note Currently only vessel visuals return anything here.
 	 */
-	virtual MESHHANDLE GetMesh (UINT idx) { return NULL; }
+	virtual D3D9Mesh * GetMesh (UINT idx) { return NULL; }
+	virtual DWORD GetMeshVisMode (UINT idx) { return MESHVIS_ALWAYS; }
 
 	virtual void PreInitObject() { }
 

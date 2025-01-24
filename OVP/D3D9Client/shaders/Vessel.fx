@@ -25,6 +25,7 @@ inline float cmax(float3 color)
 // Must be included here
 #include "Metalness.fx"
 
+
 // ============================================================================
 // Vertex shader for physics based rendering
 //
@@ -115,7 +116,7 @@ float4 AdvancedPS(float4 sc : VPOS, PBRData frg) : COLOR
 	if (dLN == 0) fSun = 0;
 
 	// Special alpha only texture in use
-	if (gNoColor) cTex.rgb = 1;
+	cTex.rgb = saturate(cTex.rgb + gNoColor.rgb);
 
 
 	// ----------------------------------------------------------------------
@@ -123,7 +124,7 @@ float4 AdvancedPS(float4 sc : VPOS, PBRData frg) : COLOR
 	// ----------------------------------------------------------------------
 
 #if SHDMAP > 0
-	cSun.rgb *= ComputeShadow(frg.shdH, dLN, sc);
+	if (!gCockpit) cSun.rgb *= ComputeShadow(frg.shdH, dLN, sc);
 #endif
 
 
@@ -158,14 +159,7 @@ float4 AdvancedPS(float4 sc : VPOS, PBRData frg) : COLOR
 
 		if (gCfg.Transl) {
 			cTransl = tex2D(TranslS, frg.tex0.xy).rgb;
-		}
-
-		// Texture Tuning -------------------------------------------------------
-		//
-		if (gTuneEnabled) {
-			cTransm *= gTune.Transm.rgba;
-			cTransl *= gTune.Transl.rgb;
-		}
+		}	
 
 		float sunLightFromBehind = saturate(dot(gSun.Dir, nrmW));
 		float sunSpotFromBehind = pow(saturate(dot(gSun.Dir, CamD)), cTransm.a);
@@ -315,10 +309,24 @@ technique VesselTech
 		DestBlend = InvSrcAlpha;
 		ZWriteEnable = true;
 	}
+
 	pass P4
 	{
 		vertexShader = compile vs_3_0 MetalnessVS();
 		pixelShader = compile ps_3_0 MetalnessPS();
+
+		AlphaBlendEnable = true;
+		BlendOp = Add;
+		ZEnable = true;
+		SrcBlend = SrcAlpha;
+		DestBlend = InvSrcAlpha;
+		ZWriteEnable = true;
+	}
+
+	pass P5
+	{
+		vertexShader = compile vs_3_0 MetalnessVS();
+		pixelShader = compile ps_3_0 BakedVC_PS();
 
 		AlphaBlendEnable = true;
 		BlendOp = Add;

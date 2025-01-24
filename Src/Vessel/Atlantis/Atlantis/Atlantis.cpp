@@ -27,6 +27,7 @@
 
 using std::min;
 using std::max;
+using namespace oapi;
 
 #ifdef _DEBUG
     // D. Beachy: for BoundsChecker debugging
@@ -1780,6 +1781,8 @@ void Atlantis::clbkVisualCreated (VISHANDLE _vis, int refcount)
 {
 	if (refcount > 1) return; // we don't support more than one visual per object
 	vis = _vis;
+
+	SetVisualProperty(vis, VisualProp::CREATE_VC_PROBE, 0, typeid(FVECTOR3), &FVECTOR3(0.0f, 2.6f, 14.0f));
 
 	// make sure the RMS attachment point is in sync with the animation state of the visual
 	SetAttachmentParams (rms_attach, arm_tip[0], arm_tip[1]-arm_tip[0], arm_tip[2]-arm_tip[0]);

@@ -2,7 +2,7 @@
 // RunwayLights.cpp
 // Part of the ORBITER VISUALISATION PROJECT (OVP) D3D9 Client
 // Dual licensed under GPL v3 and LGPL v3
-// Copyright (C) 2012 - 2016 Émile "Bibi Uncle" Grégoire
+// Copyright (C) 2012 - 2016 Ã‰mile "Bibi Uncle" GrÃ©goire
 //				 2012 - 2016 Jarmo Nikkanen
 // ==============================================================
 
@@ -33,7 +33,7 @@ RunwayLights::RunwayLights(class vBase *_vB, const class Scene *scn)
 	apr_length = 257.0;
 	iCategory = 0;
 	nPAPI = 0;
-	hObj = vB->GetObjectA();
+	hObj = vB->GetObjHandle();
 	nVASI = 0;
 	bSingleEnded = false;
 	bDisp2 = false;

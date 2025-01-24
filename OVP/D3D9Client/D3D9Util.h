@@ -72,11 +72,8 @@ const char *_PTR(const void *p);
 // helper function to get address of a temporary
 // The regular "easy" way no longer works on some compilers so lets use a hack to get a simple thing done.
 // NB: use with caution
-
 template<typename T>
 T* ptr(T&& x) { return &x; }
-
-
 
 // ------------------------------------------------------------------------------------
 // Vertex Declaration equal to NTVERTEX
@@ -321,18 +318,6 @@ typedef struct {
 	DWORD		  ModFlags;			///< Modification flags
 } D3D9MatExt;
 
-
-typedef struct {
-	D3DCOLORVALUE	Albedo;		// Tune Albedo
-	D3DCOLORVALUE	Emis;		// Tune Emission Maps
-	D3DCOLORVALUE	Spec;		// Tune Specular Maps
-	D3DCOLORVALUE	Refl;		// Tune Reflection Maps
-	D3DCOLORVALUE	Transl;		// Tune translucent effect
-	D3DCOLORVALUE	Transm;		// Tune transmissive effect
-	D3DCOLORVALUE	Norm;		// Tune normal map
-	D3DCOLORVALUE	Rghn;		// Tune roughness map
-} D3D9Tune;
-
 #pragma pack(pop)
 
 typedef struct {
@@ -389,13 +374,13 @@ public:
 	HANDLE	GetPSHandle(const char* name);
 	HANDLE	GetVSHandle(const char* name);
 
-	void	SetTexture(const char* name, LPDIRECT3DTEXTURE9 pTex, UINT Flags = IPF_CLAMP | IPF_ANISOTROPIC, UINT AnisoLvl = 4);
-	void	SetTextureVS(const char* name, LPDIRECT3DTEXTURE9 pTex, UINT flags = IPF_CLAMP | IPF_POINT, UINT AnisoLvl = 0);
+	void	SetTexture(const char* name, LPDIRECT3DBASETEXTURE9 pTex, UINT Flags = IPF_CLAMP | IPF_ANISOTROPIC, UINT AnisoLvl = 4);
+	void	SetTextureVS(const char* name, LPDIRECT3DBASETEXTURE9 pTex, UINT flags = IPF_CLAMP | IPF_POINT, UINT AnisoLvl = 0);
 	void	SetPSConstants(const char* name, void* data, UINT bytes);
 	void	SetVSConstants(const char* name, void* data, UINT bytes);
 
-	void	SetTexture(HANDLE hVar, LPDIRECT3DTEXTURE9 pTex, UINT flags = IPF_CLAMP | IPF_POINT, UINT AnisoLvl = 0);
-	void	SetTextureVS(HANDLE hVar, LPDIRECT3DTEXTURE9 pTex, UINT flags, UINT aniso);
+	void	SetTexture(HANDLE hVar, LPDIRECT3DBASETEXTURE9 pTex, UINT flags = IPF_CLAMP | IPF_POINT, UINT AnisoLvl = 0);
+	void	SetTextureVS(HANDLE hVar, LPDIRECT3DBASETEXTURE9 pTex, UINT flags, UINT aniso);
 	void	SetPSConstants(HANDLE hVar, void* data, UINT bytes);
 	void	SetVSConstants(HANDLE hVar, void* data, UINT bytes);
 	LPDIRECT3DDEVICE9 GetDevice() { return pDev; }
@@ -404,8 +389,8 @@ private:
 
 	struct TexParams
 	{
-		LPDIRECT3DTEXTURE9 pTex;
-		LPDIRECT3DTEXTURE9 pAssigned;
+		LPDIRECT3DBASETEXTURE9 pTex;
+		LPDIRECT3DBASETEXTURE9 pAssigned;
 		UINT Flags;
 		UINT AnisoLvl;
 		bool bSamplerSet;
@@ -433,7 +418,6 @@ inline double wrap(double a)
 	return a;
 }
 
-void LogMatrix(D3DXMATRIX *pM, const char *name);
 inline void LogSunLight(D3D9Sun& s)
 {
 	LogAlw("Sunlight.Dir   = [%f, %f, %f]", s.Dir.x, s.Dir.y, s.Dir.z);
@@ -581,7 +565,6 @@ void UpdateMatExt(const D3DMATERIAL9 *pIn, D3D9MatExt *pOut);
 void CreateDefaultMat(D3D9MatExt *pOut);
 void GetMatExt(const D3D9MatExt *pIn, D3DMATERIAL9 *pOut);
 bool CopyBuffer(LPDIRECT3DRESOURCE9 _pDst, LPDIRECT3DRESOURCE9 _pSrc);
-void D3D9TuneInit(D3D9Tune *);
 int LoadPlanetTextures(const char* fname, LPDIRECT3DTEXTURE9* ppdds, DWORD flags, int amount);
 float SunOcclusionByPlanet(OBJHANDLE hObj, VECTOR3 gpos);
 float OcclusionFactor(float x, float sunrad, float plnrad);

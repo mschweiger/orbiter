@@ -448,7 +448,7 @@ void SetVisual(vObject *vo)
 
 	if (!hDlg || !dwCmd) return;
 	
-	OBJHANDLE hObj = vo->GetObjectA();
+	OBJHANDLE hObj = vo->GetObjHandle();
 
 	if (oapiGetObjectType(hObj)!=OBJTP_PLANET) {
 		LogErr("Invalid Object Type in AtmoControls");

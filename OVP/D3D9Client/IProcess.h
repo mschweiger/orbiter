@@ -115,6 +115,7 @@ public:
 	void	SetDepthStencil(LPDIRECT3DSURFACE9 hSrf = NULL);
 	void	SetOutputNative(int id, LPDIRECT3DSURFACE9 hSrf);
 	void	SetTextureNative(const char *var, LPDIRECT3DBASETEXTURE9 hTex, DWORD flags);
+	void	SetTextureNative(int idx, LPDIRECT3DBASETEXTURE9 hTex, DWORD flags);
 
 private:
 
@@ -128,7 +129,7 @@ private:
 	struct {
 		LPDIRECT3DBASETEXTURE9 hTex;
 		DWORD flags;
-	} pTextures[8];
+	} pTextures[16];
 
 	gcIPInterface::ipicull mesh_cull;
 

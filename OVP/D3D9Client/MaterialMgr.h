@@ -16,24 +16,6 @@
 #include "D3D9Util.h"
 #include "vObject.h"
 
-#define ENVCAM_OMIT_ATTC		0x0001
-#define ENVCAM_OMIT_DOCKS		0x0002
-#define ENVCAM_FOCUS			0x0004
-
-
-/**
- * \brief Storage structure to keep environmental camera information.
- */
-struct ENVCAMREC {
-	D3DXVECTOR3		lPos;			///< Camera local position
-	float			near_clip;		///< Near clip-plane distance
-	DWORD			flags;			///< Camera flags
-	WORD			nAttc;			///< Number of attachments points in a list
-	WORD			nDock;			///< Number of docking ports in a list
-	BYTE *			pOmitAttc;		///< Omit attachments
-	BYTE *			pOmitDock;		///< Omit vessels in docking ports
-};
-
 /**
  * \brief Management of custom configurations for vessel materials
  */
@@ -47,8 +29,6 @@ public:
 					MatMgr(class vObject *vObj, class D3D9Client *_gc);
 					~MatMgr();
 
-	//DWORD			NewRecord(const char *name, DWORD midx);
-	//void			ClearRecord(DWORD iRec);
 	void			RegisterMaterialChange(D3D9Mesh *pMesh, DWORD midx, const D3D9MatExt *pM);
 	void			RegisterShaderChange(D3D9Mesh *pMesh, WORD id);
 	void			ApplyConfiguration(D3D9Mesh *pMesh);
@@ -56,18 +36,11 @@ public:
 	bool			LoadConfiguration(bool bAppend=false);
 	bool			LoadCameraConfig();
 	bool			HasMesh(const char *name);
-	void			ResetCamera(DWORD idx);
-
-	ENVCAMREC *		GetCamera(DWORD idx);
-	DWORD			CameraCount();
 
 private:
 
 	vObject			*vObj;
 	D3D9Client		*gc;
-	//DWORD			nRec;	///< Number of records
-	//DWORD			mRec;	///< Allocated records
-
 
 	struct SHADER {
 		SHADER(string x, WORD i) { name = x; id = i; }
@@ -82,8 +55,6 @@ private:
 
 	std::map<string, MESHREC> MeshConfig;
 	std::list<SHADER> Shaders;
-
-	ENVCAMREC *pCamera;
 };
 
 #endif

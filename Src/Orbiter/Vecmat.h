@@ -1,6 +1,8 @@
 // Copyright (c) Martin Schweiger
 // Licensed under the MIT License
 
+#define OAPI_IMPLEMENTATION
+
 #ifndef __VECMAT_H
 #define __VECMAT_H
 
@@ -166,6 +168,7 @@ public:
 		struct { double x, y, z; };
 	};
 };
+
 
 // =======================================================================
 // class Matrix

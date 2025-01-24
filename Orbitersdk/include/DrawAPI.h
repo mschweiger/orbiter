@@ -179,6 +179,18 @@ namespace oapi {
 			return FVECTOR2(x - f.x, y - f.y);
 		}
 
+		inline FVECTOR2& operator*= (float f)
+		{
+			x *= f; y *= f;
+			return *this;
+		}
+
+		inline FVECTOR2& operator/= (float f)
+		{
+			x /= f; y /= f;
+			return *this;
+		}
+
 		float x, y;
 	} FVECTOR2;
 
@@ -247,6 +259,11 @@ namespace oapi {
 		{
 			VECTOR3 v = { x,y,z };
 			return v;
+		}
+
+		inline VECTOR3 toV3() const
+		{
+			return { x,y,z };
 		}
 
 		inline FVECTOR3& operator*= (float f)
@@ -337,6 +354,16 @@ namespace oapi {
 		inline FVECTOR3 operator-() const
 		{
 			return FVECTOR3(-x, -y, -z);
+		}
+
+		inline bool operator== (const FVECTOR3& f) const
+		{
+			return x == f.x && y == f.y && z == f.z;
+		}
+
+		inline bool operator!= (const FVECTOR3& f) const
+		{
+			return x != f.x || y != f.y || z != f.z;
 		}
 
 #ifdef D3D9CLIENT_EXPORTS
@@ -610,10 +637,19 @@ namespace oapi {
 	*/
 	typedef union __declspec(align(16)) FMATRIX4
 	{
+		
 		FMATRIX4() {
-			m11 = m12 = m13, m14 = m21 = m22 = m23 = m24 = m31 = m32 = m33 = m34 = m41 = m42 = m43 = m44 = 0;
+			m21 = m31 = m41 = m12 = m32 = m42 = 0.0f;
+			m13 = m23 = m43 = m14 = m24 = m34 = 0.0f;
+			m11 = m22 = m33 = m44 = 1.0f;
 		}
 
+
+		FMATRIX4(float f) {
+			m11 = m12 = m13, m14 = m21 = m22 = m23 = m24 = m31 = m32 = m33 = m34 = m41 = m42 = m43 = m44 = f;
+		}
+
+		
 		FMATRIX4(float m11, float m12, float m13, float m14,
 				 float m21, float m22, float m23, float m24,
 				 float m31, float m32, float m33, float m34,
@@ -642,6 +678,17 @@ namespace oapi {
 		{
 			return (LPD3DXMATRIX)this;
 		}
+
+		inline LPD3DXMATRIX toDX()
+		{
+			return (LPD3DXMATRIX)this;
+		}
+
+		inline const D3DXMATRIX* toCDX() const
+		{
+			return (const D3DXMATRIX*)this;
+		}
+
 #endif
 
 		void Zero()
@@ -651,7 +698,8 @@ namespace oapi {
 
 		void Ident()
 		{
-			for (int i = 0; i < 16; i++) data[i] = 0.0;
+			m21 = m31 = m41 = m12 = m32 = m42 = 0.0f;
+			m13 = m23 = m43 = m14 = m24 = m34 = 0.0f;
 			m11 = m22 = m33 = m44 = 1.0f;
 		}
 
@@ -663,6 +711,7 @@ namespace oapi {
 			_swap(m14, m41); _swap(m23, m32);
 			_swap(m24, m42); _swap(m34, m43);
 		}
+
 
 		float data[16];
 		struct { FVECTOR4 _x, _y, _z, _p; };
@@ -1005,10 +1054,12 @@ public:
 		RENDER_ALL = 0x04		///< Render all meshgroups
 	};
 
-
+	/**
+	 * \brief Source layout structure for GUI element drawing 
+	 */
 	typedef struct {
-		RECT intr;
-		RECT outr;
+		RECT intr;				///< Interrior rect
+		RECT outr;				///< Outerrior rect
 	} skpRegion;
 
 	/**

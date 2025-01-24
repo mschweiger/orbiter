@@ -260,6 +260,7 @@ bool ImageProcessing::Execute(DWORD blendop, bool bInScene, gcIPInterface::ipite
 	HR(pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, false));
 	HR(pDevice->SetRenderState(D3DRS_STENCILENABLE, false));
 	HR(pDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF));
+	HR(pDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, false));
 
 	if (blendop == 1) {
 		HR(pDevice->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD));
@@ -269,14 +270,14 @@ bool ImageProcessing::Execute(DWORD blendop, bool bInScene, gcIPInterface::ipite
 
 	// Define vertices --------------------------------------------------------
 	//
-	SMVERTEX Vertex[4] = {
+	static const SMVERTEX Vertex[4] = {
 		{0, 0, 0, 0, 0},
 		{0, 1, 0, 0, 1},
 		{1, 1, 0, 1, 1},
 		{1, 0, 0, 1, 0}
 	};
 
-	static WORD cIndex[6] = {0, 2, 1, 0, 3, 2};
+	static const WORD cIndex[6] = {0, 2, 1, 0, 3, 2};
 
 	// Set render targets -----------------------------------------------------
 	//
@@ -292,16 +293,18 @@ bool ImageProcessing::Execute(DWORD blendop, bool bInScene, gcIPInterface::ipite
 
 	// Set Depth-Stencil surface ----------------------------------------------
 	//
+
+	pDevice->GetDepthStencilSurface(&pDepthBak);
+
 	if (pDepth) {	
 		HR(pDevice->SetRenderState(D3DRS_ZENABLE, true));
 		HR(pDevice->SetRenderState(D3DRS_ZWRITEENABLE, true));
-
-		pDevice->GetDepthStencilSurface(&pDepthBak);
-		pDevice->SetDepthStencilSurface(pDepth);
+		HR(pDevice->SetDepthStencilSurface(pDepth));
 	}
 	else {
 		HR(pDevice->SetRenderState(D3DRS_ZENABLE, false));
 		HR(pDevice->SetRenderState(D3DRS_ZWRITEENABLE, false));
+		HR(pDevice->SetDepthStencilSurface(NULL));
 	}
 
 	// Set textures and samplers -----------------------------------------------
@@ -382,9 +385,9 @@ bool ImageProcessing::Execute(DWORD blendop, bool bInScene, gcIPInterface::ipite
 
 	// Disconnect render targets ----------------------------------------------
 	//
-	if (pDepth) {
-		pDevice->SetDepthStencilSurface(pDepthBak);
-	}
+	pDevice->SetDepthStencilSurface(pDepthBak);
+	SAFE_RELEASE(pDepthBak);
+	
 
 	// Disconnect render targets ----------------------------------------------
 	//
@@ -617,6 +620,23 @@ void ImageProcessing::SetTextureNative(const char *var, LPDIRECT3DBASETEXTURE9 h
 	}
 
 	DWORD idx = pPSConst->GetSamplerIndex(hVar);
+
+	if (!hTex) {
+		pTextures[idx].hTex = NULL;
+		pTextures[idx].flags = 0;
+		return;
+	}
+
+	pTextures[idx].hTex = hTex;
+	pTextures[idx].flags = flags;
+}
+
+
+// ================================================================================================
+//
+void ImageProcessing::SetTextureNative(int idx, LPDIRECT3DBASETEXTURE9 hTex, DWORD flags)
+{
+	if (idx < 0 || idx>15) return;
 
 	if (!hTex) {
 		pTextures[idx].hTex = NULL;

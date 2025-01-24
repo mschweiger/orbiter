@@ -234,6 +234,7 @@ public:
 	void SetVCAreaClickmode_Quadrilateral (int id, const Vector &p1, const Vector &p2, const Vector &p3, const Vector &p4);
 	void TriggerVCRedrawArea (int vcid, int area_id);
 	void TriggerRedrawArea (int pid, int vcid, int area_id);
+	void GetVCAreaClickZones(std::list<VCClickZone>* p_List);
 
 	void SetPanel2DBlink (VECTOR3 v[4]);
 

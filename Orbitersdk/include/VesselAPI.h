@@ -26,6 +26,8 @@
 #define FRAME_ECL 0
 #define FRAME_EQU 1
 
+#include <typeinfo>
+
 class Vessel; // Orbiter internal vessel class
 class SuperVessel; // Orbiter internal supervessel class
 
@@ -39,6 +41,16 @@ typedef struct {
 	double mu;        ///< isotropic/lateral friction coefficient
 	double mu_lng;    ///< longitudinal friction coefficient (only used for first 3 points)
 } TOUCHDOWNVTX;
+
+enum class VisualProp {
+	BAKED_LIGHT,		///< baked light level
+	AMBIENT,			///< ambient light level
+	EXT_PROBE_POS,		///< Exterior probe position
+	CREATE_VC_PROBE,	///< Virtual cockpit probe position
+	DA_CURVE,
+	DA_BOUNCH,
+	DA_FORCE
+};
 
 //  ======================================================================
 /**
@@ -3834,6 +3846,15 @@ public:
 	void SetMeshVisibilityMode (UINT idx, WORD mode) const;
 
 	/**
+	 * \brief Set vessel visual propery
+	 * \param vis visual object handle
+	 * \param prp property id
+	 * \param idx index of property
+	 * \param val value to be set
+	 */
+	void SetVisualProperty(VISHANDLE vis, VisualProp prp, int idx, const type_info &t, const void *val);
+
+	/**
 	 * \brief Affine transformation of a mesh group.
 	 * \param vis vessel visual handle
 	 * \param mt transformation parameter structure
@@ -4662,6 +4683,12 @@ public:
 	 *   AttachChild, DetachChild
 	 */
 	ATTACHMENTHANDLE GetAttachmentHandle (bool toparent, DWORD i) const;
+
+	/**
+	 * \brief Return the handle of a root object in a attachment hierarchy. (i.e. vessel that has not parent)
+	 * \return Vessel handle. Returns vessel's own handle "this" if no parent exists.
+	 */
+	OBJHANDLE GetAttachmentRoot() const;
 
 	/**
 	 * \brief Attach a child vessel to an attachment point.

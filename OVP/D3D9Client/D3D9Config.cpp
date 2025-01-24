@@ -98,6 +98,8 @@ void D3D9Config::Reset ()
 	bIrradiance			= 1;
 	bAtmoQuality		= 1;
 	NoPlanetAA			= 0;
+	VCCascadeCount		= 2;
+	ExpVCLight			= 0;
 	
 	GFXIntensity = 0.5;
 	GFXDistance = 0.8;
@@ -196,6 +198,8 @@ bool D3D9Config::ReadParams ()
 	if (oapiReadItem_int   (hFile, (char*)"DebugBreak", i))					DebugBreak = max(0, min(1, i));
 	if (oapiReadItem_int   (hFile, (char*)"ShaderCacheUse", i))				ShaderCacheUse = max(0, min(1, i));
 	if (oapiReadItem_int   (hFile, (char*)"NoPlanetAA", i))					NoPlanetAA = max(0, min(1, i));
+	if (oapiReadItem_int   (hFile, (char*)"VCCascadeCount", i))					VCCascadeCount = max(1, min(3, i));
+	if (oapiReadItem_int   (hFile, (char*)"ExperimentalVCLight", i))			ExpVCLight = max(0, min(1, i));
 	if (oapiReadItem_float (hFile, (char*)"OrbitalShadowMult", d))			    OrbitalShadowMult = max(0.5, min(10.0, d));
 
 	if (oapiReadItem_float (hFile, (char*)"GFXIntensity", d))					GFXIntensity = max(0.0, min(1.0, d));
@@ -287,6 +291,8 @@ void D3D9Config::WriteParams ()
 	oapiWriteItem_int	(hFile, (char*)"DebugBreak", DebugBreak);
 	oapiWriteItem_int	(hFile, (char*)"ShaderCacheUse", ShaderCacheUse);
 	oapiWriteItem_int	(hFile, (char*)"NoPlanetAA", NoPlanetAA);
+	oapiWriteItem_int   (hFile, (char*)"VCCascadeCount", VCCascadeCount);
+	oapiWriteItem_int	(hFile, (char*)"ExperimentalVCLight", ExpVCLight);
 
 	oapiWriteItem_float (hFile, (char*)"OrbitalShadowMult", OrbitalShadowMult);
 	oapiWriteItem_float (hFile, (char*)"GFXIntensity", GFXIntensity);

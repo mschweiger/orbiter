@@ -61,10 +61,9 @@ float4 TinyMeshTechPS(MeshVS frg) : COLOR
 	float4 cSpec = gMtrl.specular;
 	float4 cTex = 1;
 
-	if (gTextured) {
-		if (gNoColor) cTex.a = tex2D(WrapS, frg.tex0.xy).a;
-		else cTex = tex2D(WrapS, frg.tex0.xy);
-	}
+	if (gTextured) cTex = tex2D(WrapS, frg.tex0.xy);
+
+	cTex.rgb = saturate(cTex.rgb + gNoColor.rgb);
 
 	if (gFullyLit) return float4(cTex.rgb*saturate(gMtrl.diffuse.rgb + gMtrl.emissive.rgb), cTex.a);
 

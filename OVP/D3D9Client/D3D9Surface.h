@@ -1,6 +1,6 @@
 // ==============================================================
 // Part of the ORBITER VISUALISATION PROJECT (OVP)
-// Dual licensed under GPL v3 and LGPL v3
+// Licensed under LGPL v2
 // Copyright (C) 2012 - 2016 Jarmo Nikkanen
 // ==============================================================
 
@@ -24,7 +24,8 @@
 #define	MAP_ROUGHNESS		6
 #define	MAP_METALNESS		7
 #define	MAP_HEAT			8
-#define MAP_MAX_COUNT		9
+#define MAP_AMBIENT			9
+#define MAP_MAX_COUNT		10
 
 #define OAPISURFACE_MAPS		0x80000000		// Additional Texture Maps
 #define OAPISURFACE_BACKBUFFER	0x40000000		// It's a backbuffer
@@ -33,7 +34,8 @@
 
 #define OAPISURF_SKP_GDI_WARN	0x00000001
 
-LPDIRECT3DTEXTURE9	NatLoadSpecialTexture(const char* fname, const char* ext);
+LPDIRECT3DTEXTURE9	NatLoadTexture(const char* path, bool bNoMips = false);
+LPDIRECT3DTEXTURE9	NatLoadSpecialTexture(const char* fname, const char* ext, bool bNoMips = false);
 SURFHANDLE			NatLoadSurface(const char* file, DWORD flags, bool bPath = false);
 bool				NatSaveSurface(const char* file, LPDIRECT3DRESOURCE9 pResource);
 SURFHANDLE			NatCreateSurface(int width, int height, DWORD flags);
@@ -48,6 +50,9 @@ const char*			NatPool(D3DPOOL Pool);
 const char*			NatOAPIFlags(DWORD AF);
 const char*			NatOAPIFormat(DWORD PF);
 void				NatDumpResource(LPDIRECT3DRESOURCE9 pResource);
+void				NatLoadMaps(SurfNative* pNat, const char* file);
+void				NatLoadMap(SurfNative* pNat, const char* file);
+bool				NatIsTypeOf(const char*, const char*);
 
 
 #define ERR_DC_NOT_AVAILABLE		0x1
@@ -94,7 +99,9 @@ public:
 	DWORD*					GetClientFlags();
 
 	const char*				GetName() const { return name; }
+	const char*				GetPath() const { return path; }
 	void					SetName(const char*);
+	void					SetPath(const char*);
 	HDC						GetDC();
 	void					ReleaseDC(HDC);
 
@@ -134,6 +141,7 @@ public:
 	// -------------------------------------------------------------------------------
 
 	char					name[128];				// Surface name
+	char					path[MAX_PATH];			// Surface name with path
 	SURFHANDLE				hOrigin;
 	D3DSURFACE_DESC			desc;					// Surface size and format description
 	D3DRESOURCETYPE			type;					// Resource type

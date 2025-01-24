@@ -3,7 +3,7 @@
 // Part of the ORBITER VISUALISATION PROJECT (OVP)
 // Dual licensed under GPL v3 and LGPL v3
 // Copyright (C) 2006-2016 Martin Schweiger
-//				 2012-2019 Jarmo Nikkanen
+//				 2012-2023 Jarmo Nikkanen
 // ==============================================================
 
 // ==============================================================
@@ -20,9 +20,11 @@
 #include "D3D9Client.h"
 #include "D3D9Effect.h"
 #include "AABBUtil.h"
+#include "IProcess.h"
 #include <d3d9.h>
 #include <d3dx9.h>
 #include <vector>
+#include <map>
 
 const DWORD SPEC_DEFAULT = (DWORD)(-1); // "default" material/texture flag
 const DWORD SPEC_INHERIT = (DWORD)(-2); // "inherit" material/texture flag
@@ -45,6 +47,7 @@ const DWORD SPEC_INHERIT = (DWORD)(-2); // "inherit" material/texture flag
 #define SHADER_LEGACY			2			// Shader most compatible with DX7 Inline
 #define SHADER_XR2HUD			3			// XR2 HUD shader
 #define SHADER_METALNESS		4
+#define SHADER_BAKED_VC			5
 #define SHADER_SHADOWMAP		10
 #define SHADER_SHADOWMAP_OIT	11
 #define SHADER_NORMAL_DEPTH		12
@@ -54,12 +57,19 @@ const DWORD SPEC_INHERIT = (DWORD)(-2); // "inherit" material/texture flag
 #define VCLASS_ULTRA		3
 #define VCLASS_SSU_CENTAUR	4
 
+
 // Mesh memory mapping mode
 #define MAPMODE_UNKNOWN		0
 #define MAPMODE_CURRENT		1
 #define MAPMODE_STATIC		2
 #define MAPMODE_DYNAMIC		3
 
+
+#define ENVCAM_OMIT_ATTC		0x0001	///< Do not render attachments, rendered by default
+#define ENVCAM_OMIT_DOCKS		0x0002	///< Do not render docked vessels, rendered by default
+#define ENVCAM_FOCUS			0x0004	///< Force rendering of focus object, omitted by default
+#define ENVCAM_PLANE			0x0008	///< Camera view is 160deg square plane, 360deg cube-map by default
+#define ENVCAM_USER				0x0010	///< User supplied setup
 
 
 
@@ -69,6 +79,12 @@ struct _LightList {
 	float	illuminace;
 };
 
+struct _BakedLights {
+	LPDIRECT3DTEXTURE9 pMap[16];
+	LPDIRECT3DTEXTURE9 pSunAO[6];
+	LPDIRECT3DTEXTURE9 pCombined;
+	LPDIRECT3DTEXTURE9 pSunAOComb;
+};
 
 class MeshShader : public ShaderClass
 {
@@ -121,6 +137,8 @@ public:
 	void Map(LPDIRECT3DDEVICE9 pDev);
 	bool IsLocalTo(const class D3D9Mesh *_pRoot) const { return (_pRoot == pRoot); }
 	void MustRemap(DWORD mode);
+	bool Release();
+	MeshBuffer* Reference();
 
 	LPDIRECT3DVERTEXBUFFER9 pVB;
 	LPDIRECT3DVERTEXBUFFER9 pGB;
@@ -132,6 +150,7 @@ public:
 	WORD					*pIBSys;
 	SMVERTEX				*pSBSys;
 
+	DWORD nRef;
 	DWORD nVtx;
 	DWORD nIdx;
 	DWORD mapMode;
@@ -161,9 +180,11 @@ public:
 	bool bIsReflective;			// Mesh has a reflective material in one or more groups
 	bool bMtrlModidied;
 	bool bIsTemplate;
-	
+
+	DWORD MeshFlags;
 	D9BBox BBox;
 	MeshBuffer *pBuf;
+	MESHHANDLE hOapiMesh;
 
 	struct GROUPREC {			// mesh group definition
 		DWORD VertOff;			// Main mesh Vertex Offset
@@ -200,9 +221,12 @@ public:
 					~D3D9Mesh();
 
 	bool			IsOK() const { return pBuf != NULL; }
-
+	MESHHANDLE		GetOapiHandle() { return hOapiMesh; }
 	void			Release();
-
+	void			ClearBake(int i);
+	void			LoadBakedLights();
+	void			BakeLights(ImageProcessing *pBaker, const FVECTOR3* BakedLightsControl);
+	void			BakeAO(ImageProcessing* pBaker, const FVECTOR3 &vSun, const LVLH& lvlh, const LPDIRECT3DTEXTURE9 pIrrad);
 	void			LoadMeshFromHandle(MESHHANDLE hMesh, D3DXVECTOR3 *reorig = NULL, float *scale = NULL);
 	void			ReLoadMeshFromHandle(MESHHANDLE hMesh);
 	void			ReloadTextures();
@@ -210,8 +234,10 @@ public:
 	void			SetName(const char *name);
 	void			SetName(UINT idx);
 	const char *	GetName() const { return name; }
+	const char *	GetDirName(int i, int v);
+	FVECTOR3		GetDir(int i);
 
-	void			SetDefaultShader(WORD shader) { DefShader = shader; bMtrlModidied = true; }
+	void			SetDefaultShader(WORD shader);
 	WORD			GetDefaultShader() const { return DefShader; }
 	
 	void			SetClass(DWORD cl) { vClass = cl; }
@@ -229,6 +255,7 @@ public:
 	 * \return Pointer to group structure.
 	 */
 	const GROUPREC * GetGroup(DWORD idx) const;
+	GROUPREC*		GetGroup(DWORD idx);
 	void            SetMFDScreenId(DWORD idx, WORD id);
 	void			SetDualSided(DWORD idx, bool bState) { Grp[idx].bDualSided = bState; }
 
@@ -251,8 +278,6 @@ public:
 	void			SetMaterial(const D3DMATERIAL9 *pMat, DWORD idx, bool bUpdateStatus = true);
 	int				SetMaterialEx(DWORD idx, MatProp mid, const FVECTOR4* in);
 	int				GetMaterialEx(DWORD idx, MatProp mid, FVECTOR4* out);
-	bool			GetTexTune(D3D9Tune *pT, DWORD idx) const;
-	void			SetTexTune(const D3D9Tune *pT, DWORD idx);
 
 	DWORD			GetGroupCount() const { return nGrp; }
 	DWORD			GetMaterialCount() const { return nMtrl; }
@@ -289,9 +314,9 @@ public:
 	void			RenderGroup(int idx);
 	void			RenderBaseTile(const LPD3DXMATRIX pW);
 	void			RenderBoundingBox(const LPD3DXMATRIX pW);
-	void			Render(const LPD3DXMATRIX pW, int iTech=RENDER_VESSEL, LPDIRECT3DCUBETEXTURE9 *pEnv=NULL, int nEnv=0);
+	void			Render(const LPD3DXMATRIX pW, const ENVCAMREC* em = NULL, int iTech = RENDER_VESSEL);
 	void			RenderFast(const LPD3DXMATRIX pW, int iTech);
-	void			RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, int flags);
+	void			RenderShadowMap(const LPD3DXMATRIX pW, const LPD3DXMATRIX pVP, int flags, bool bNoCull = false);
 	void			RenderStencilShadows(float alpha, const LPD3DXMATRIX pP, const LPD3DXMATRIX pW, bool bShadowMap = false, const D3DXVECTOR4 *elev = NULL);
 	void			RenderShadowsEx(float alpha, const LPD3DXMATRIX pP, const LPD3DXMATRIX pW, const D3DXVECTOR4 *light, const D3DXVECTOR4 *param);
 	void			RenderRings(const LPD3DXMATRIX pW, LPDIRECT3DTEXTURE9 pTex);
@@ -307,15 +332,17 @@ public:
 
 	void			SetSunLight(const D3D9Sun *pLight);
 
-	D3D9Pick		Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DXVECTOR3 *vDir);
+	D3D9Pick		Pick(const LPD3DXMATRIX pW, const LPD3DXMATRIX pT, const D3DXVECTOR3 *vDir, const PickProp* p);
 
 	void			UpdateBoundingBox();
 	void			BoundingBox(const NMVERTEX *vtx, DWORD n, D9BBox *box);
 
-	void			SetAmbientColor(D3DCOLOR c);
+	void			SetAmbientColor(const FVECTOR3& c);
+	const FVECTOR3& GetAmbientColor();
 	void			SetupFog(const LPD3DXMATRIX pW);
 	void			ResetRenderStatus();
 
+	LPDIRECT3DTEXTURE9 GetCombinedMap(int tex_idx = -1);
 
 	/**
 	 * \brief Enable/disable material alpha value for transparency calculation.
@@ -329,6 +356,7 @@ public:
 
 	static void		GlobalInit(LPDIRECT3DDEVICE9 pDev);
 	static void		GlobalExit();
+	static void		SetShadows(const SHADOWMAP* sprm);
 
 private:
 
@@ -340,6 +368,7 @@ private:
 	void			Null(const char *meshName = NULL);
 	void			UpdateFlags();
 	void			ConfigureAtmo();
+	void			ConfigureShadows();
 
 	WORD	DefShader;
 	DWORD	MaxVert;
@@ -352,12 +381,15 @@ private:
 	DWORD Flags;
 	D3D9MatExt *Mtrl;           // list of mesh materials
 	SurfNative **Tex;			// list of mesh textures
-	D3D9Tune *pTune;
+	std::map<int, _BakedLights> BakedLights;
+	std::map<int, _BakedLights>::const_iterator bli;
+	std::vector<ENVCAMREC*> env_cams;
+
 	D3DXMATRIX mTransform;
 	D3DXMATRIX mTransformInv;
 	D3DXMATRIX *pGrpTF;
 	D3D9Sun sunLight;
-	D3DCOLOR cAmbient;
+	FVECTOR3 cAmbient;
 	LightStruct null_light;
 
 	_LightList LightList[MAX_SCENE_LIGHTS];
@@ -369,6 +401,8 @@ private:
 
 	char name[128];
 
+	static LPDIRECT3DTEXTURE9 pShadowMap[SHM_CASCADE_COUNT];
+	static FVECTOR4 ShdSubRect[SHM_CASCADE_COUNT];
 	static MeshShader* s_pShader[16];
 };
 

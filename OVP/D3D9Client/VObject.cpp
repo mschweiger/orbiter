@@ -102,8 +102,10 @@ void vObject::GlobalInit(D3D9Client *gclient)
 	//
 	hStockMesh[D3D9SM_ARROW] = new D3D9Mesh("D3D9Arrow");
 	hStockMesh[D3D9SM_SPHERE] = new D3D9Mesh("D3D9Sphere");
+	hStockMesh[D3D9SM_BOX] = new D3D9Mesh("D3D9Box");
 
 	hStockMesh[D3D9SM_SPHERE]->SetDualSided(0, true);
+	hStockMesh[D3D9SM_BOX]->SetDualSided(0, true);
 }
 
 

@@ -327,7 +327,7 @@ void D3D9Pad::StretchRectNative(const LPDIRECT3DTEXTURE9 pSrc, const RECT *_s, c
 	if (Topology(TRIANGLE)) {
 
 		auto s = _s ? *_s : GetFullRectNative(pSrc);
-		auto t = *_t;
+		auto t = _t ? *_t : tgt;
 
 		AddRectIdx(vI);
 

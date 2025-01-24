@@ -1,7 +1,7 @@
 // ===========================================================================================
 // D3D9Surface.cpp
 // Part of the ORBITER VISUALISATION PROJECT (OVP)
-// Dual licensed under GPL v3 and LGPL v3
+// Licensed under LGPL v2
 // Copyright (C) 2011 - 2016 Jarmo Nikkanen
 // ===========================================================================================
 
@@ -20,6 +20,8 @@ using namespace oapi;
 extern D3D9Client* g_client;
 
 
+// ===============================================================================================
+//
 void NatCheckFlags(DWORD &flags)
 {
 	// Append dependend flags
@@ -53,33 +55,79 @@ void NatCheckFlags(DWORD &flags)
 	}
 }
 
-LPDIRECT3DTEXTURE9 NatLoadSpecialTexture(const char* fname, const char* ext)
+
+// ===============================================================================================
+// Load a simple plain texture
+//
+LPDIRECT3DTEXTURE9 NatLoadTexture(const char* path, bool bNoMips)
 {
-	char path[MAX_PATH];
-	char name[MAX_PATH];
-
-	NatCreateName(name, ARRAYSIZE(name), fname, ext);
-
 	LPDIRECT3DTEXTURE9 pTex = NULL;
-	
-	if (g_client->TexturePath(name, path)) {
-		D3DXIMAGE_INFO info;	
-		if (D3DXGetImageInfoFromFileA(path, &info) == S_OK) {
+	D3DXIMAGE_INFO info;
 
-			DWORD Mips = D3DFMT_FROM_FILE;
+	if (D3DXGetImageInfoFromFileA(path, &info) == S_OK) {
 
-			if (Config->TextureMips == 2) Mips = 0;                         // Autogen all
-			if (Config->TextureMips == 1 && info.MipLevels == 1) Mips = 0;  // Autogen missing
+		DWORD Mips = D3DFMT_FROM_FILE;
 
-			if (S_OK == D3DXCreateTextureFromFileExA(g_client->GetDevice(), path, info.Width, info.Height, Mips, 0, D3DFMT_FROM_FILE, D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex))
-			{
-				return pTex;
-			}
+		if (Config->TextureMips == 2) Mips = 0;                         // Autogen all
+		if (Config->TextureMips == 1 && info.MipLevels == 1) Mips = 0;  // Autogen missing
+		if (bNoMips) Mips = 1;
+
+		if (S_OK == D3DXCreateTextureFromFileExA(g_client->GetDevice(), path, info.Width, info.Height, Mips, 0, D3DFMT_FROM_FILE, D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex))
+		{
+			LogBlu("TextureLoaded [%s] Mips=%u Format=%u (%u,%u)", RemovePath(path), pTex->GetLevelCount(), info.Format, info.Width, info.Height);
+			return pTex;
 		}
 	}
+	
 	return NULL;
 }
 
+
+// ===============================================================================================
+// Load a simple plain texture with map type extension
+//
+LPDIRECT3DTEXTURE9 NatLoadSpecialTexture(const char* path, const char* ext, bool bNoMips)
+{
+	char name[MAX_PATH];
+	NatCreateName(name, ARRAYSIZE(name), path, ext);
+	return NatLoadTexture(name, bNoMips);
+}
+
+
+// ======================================================================================
+// Main loading routine for all maps
+//
+void NatLoadMaps(SurfNative *pNat, const char* path)
+{
+	pNat->AddMap(MAP_HEAT, NatLoadSpecialTexture(path, "_heat"));
+	pNat->AddMap(MAP_NORMAL, NatLoadSpecialTexture(path, "_norm"));
+	pNat->AddMap(MAP_SPECULAR, NatLoadSpecialTexture(path, "_spec"));
+	pNat->AddMap(MAP_EMISSION, NatLoadSpecialTexture(path, "_emis"));
+	pNat->AddMap(MAP_ROUGHNESS, NatLoadSpecialTexture(path, "_rghn"));
+	pNat->AddMap(MAP_METALNESS, NatLoadSpecialTexture(path, "_metal"));
+	pNat->AddMap(MAP_REFLECTION, NatLoadSpecialTexture(path, "_refl"));
+	pNat->AddMap(MAP_TRANSLUCENCE, NatLoadSpecialTexture(path, "_transl"));
+	pNat->AddMap(MAP_TRANSMITTANCE, NatLoadSpecialTexture(path, "_transm"));
+	pNat->AddMap(MAP_AMBIENT, NatLoadSpecialTexture(path, "_bkao"));
+}
+
+
+// ======================================================================================
+// Main loading routine for a single map
+//
+void NatLoadMap(SurfNative* pNat, const char* path)
+{
+	if (NatIsTypeOf(path, "heat")) { pNat->AddMap(MAP_HEAT, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "norm")) { pNat->AddMap(MAP_NORMAL, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "spec")) { pNat->AddMap(MAP_SPECULAR, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "emis")) { pNat->AddMap(MAP_EMISSION, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "rghn")) { pNat->AddMap(MAP_ROUGHNESS, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "metal")) { pNat->AddMap(MAP_METALNESS, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "refl")) { pNat->AddMap(MAP_REFLECTION, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "transl")) { pNat->AddMap(MAP_TRANSLUCENCE, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "transm")) { pNat->AddMap(MAP_TRANSMITTANCE, NatLoadTexture(path)); return; }
+	if (NatIsTypeOf(path, "bkao")) { pNat->AddMap(MAP_AMBIENT, NatLoadTexture(path)); return; }
+}
 
 
 // ======================================================================================
@@ -95,12 +143,8 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 	char path[MAX_PATH];
 
 	if (bPath) strcpy_s(path, MAX_PATH, file);
-	else {
-		if (!g_client->TexturePath(file, path)) {
-			return NULL;
-		}
-	}
-	
+	else if (!g_client->TexturePath(file, path)) return NULL;
+
 	DWORD pass = OAPISURFACE_TEXTURE | OAPISURFACE_SHARED;
 
 	// Load regular texture with additional maps if exists
@@ -112,9 +156,9 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 		if (D3DXGetImageInfoFromFileA(path, &info) == S_OK)
 		{
 
-			if (info.ImageFileFormat == D3DXIFF_JPG) info.Format = D3DFMT_X8R8G8B8;
-			if (info.ImageFileFormat == D3DXIFF_PNG) info.Format = D3DFMT_X8R8G8B8;
-			if (info.ImageFileFormat == D3DXIFF_BMP) info.Format = D3DFMT_X8R8G8B8;
+			if (info.ImageFileFormat == D3DXIFF_JPG) info.Format = D3DFMT_X8R8G8B8, flags |= OAPISURFACE_DIFFUSE_ONLY;
+			if (info.ImageFileFormat == D3DXIFF_PNG) info.Format = D3DFMT_X8R8G8B8, flags |= OAPISURFACE_DIFFUSE_ONLY;
+			if (info.ImageFileFormat == D3DXIFF_BMP) info.Format = D3DFMT_X8R8G8B8, flags |= OAPISURFACE_DIFFUSE_ONLY;
 
 			DWORD Mips = D3DFMT_FROM_FILE;
 			if (Config->TextureMips == 2) Mips = 0;                         // Autogen all
@@ -124,18 +168,13 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 			{
 				pNat = new SurfNative(pTex, flags);
 				pNat->SetName(file);
-
+				pNat->SetPath(path);
 				LogBlu("TextureLoaded [%s] PLAIN Mips=%u Format=%u (%u,%u) Flags=0x%X, %s", file, pTex->GetLevelCount(), info.Format, info.Width, info.Height, flags, _PTR(pNat));
 
-				pNat->AddMap(MAP_HEAT, NatLoadSpecialTexture(file, "heat"));
-				pNat->AddMap(MAP_NORMAL, NatLoadSpecialTexture(file, "norm"));
-				pNat->AddMap(MAP_SPECULAR, NatLoadSpecialTexture(file, "spec"));
-				pNat->AddMap(MAP_EMISSION, NatLoadSpecialTexture(file, "emis"));
-				pNat->AddMap(MAP_ROUGHNESS, NatLoadSpecialTexture(file, "rghn"));
-				pNat->AddMap(MAP_METALNESS, NatLoadSpecialTexture(file, "metal"));
-				pNat->AddMap(MAP_REFLECTION, NatLoadSpecialTexture(file, "refl"));
-				pNat->AddMap(MAP_TRANSLUCENCE, NatLoadSpecialTexture(file, "transl"));
-				pNat->AddMap(MAP_TRANSMITTANCE, NatLoadSpecialTexture(file, "transm"));
+				if ((flags & OAPISURFACE_DIFFUSE_ONLY) == 0)
+				{
+					NatLoadMaps(pNat, path);
+				}
 			}
 			else oapiWriteLogV("FAILED: NatLoadSurface(%d)", path);
 		}
@@ -197,6 +236,7 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 			{
 				SurfNative* pSrf = new SurfNative(pTex, flags);
 				pSrf->SetName(file);
+				pSrf->SetPath(path);
 				LogBlu("TextureLoaded [%s] Mips=%u, Usage=%u, Format=%u (%u,%u) Flags=0x%X, %s", file, pTex->GetLevelCount(), Usage, Format, info.Width, info.Height, flags, _PTR(pSrf));
 				return SURFHANDLE(pSrf);
 			}
@@ -212,6 +252,7 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 				{
 					SurfNative* pSrf = new SurfNative(pSurf, flags);
 					pSrf->SetName(file);
+					pSrf->SetPath(path);
 					LogBlu("SurfaceLoaded [%s] RENDERTARGET Format=%u (%u,%u) Flags=0x%X %s", file, Format, info.Width, info.Height, flags, _PTR(pSrf));
 					return SURFHANDLE(pSrf);
 				}
@@ -226,22 +267,22 @@ SURFHANDLE NatLoadSurface(const char* file, DWORD flags, bool bPath)
 
 // ===============================================================================================
 //
-bool NatSaveSurface(const char* file, LPDIRECT3DRESOURCE9 pResource)
+bool NatSaveSurface(const char* path, LPDIRECT3DRESOURCE9 pResource)
 {
 	LPDIRECT3DDEVICE9 pDev = g_client->GetDevice();
 	
 	D3DXIMAGE_FILEFORMAT fmt = D3DXIMAGE_FILEFORMAT(0);
 
-	if (contains(file, ".dds")) fmt = D3DXIFF_DDS;
-	if (contains(file, ".bmp")) fmt = D3DXIFF_BMP;
-	if (contains(file, ".jpg")) fmt = D3DXIFF_JPG;
-	if (contains(file, ".png")) fmt = D3DXIFF_PNG;
+	if (contains(path, ".dds")) fmt = D3DXIFF_DDS;
+	if (contains(path, ".bmp")) fmt = D3DXIFF_BMP;
+	if (contains(path, ".jpg")) fmt = D3DXIFF_JPG;
+	if (contains(path, ".png")) fmt = D3DXIFF_PNG;
 
 
 	if (pResource->GetType() == D3DRTYPE_SURFACE)
 	{
 		LPDIRECT3DSURFACE9 pSurf = static_cast<LPDIRECT3DSURFACE9>(pResource);
-		if (D3DXSaveSurfaceToFileA(file, fmt, pSurf, NULL, NULL) == S_OK) return true;
+		if (D3DXSaveSurfaceToFileA(path, fmt, pSurf, NULL, NULL) == S_OK) return true;
 		oapiWriteLog((char*)"NatSaveSurface(SURF):");
 		NatDumpResource(pResource);
 		return false;
@@ -255,7 +296,7 @@ bool NatSaveSurface(const char* file, LPDIRECT3DRESOURCE9 pResource)
 		pTex->GetLevelDesc(0, &desc);
 
 		if (desc.Pool == D3DPOOL_SYSTEMMEM || desc.Usage & D3DUSAGE_DYNAMIC) {
-			if (D3DXSaveTextureToFileA(file, fmt, pTex, NULL) == S_OK) return true;
+			if (D3DXSaveTextureToFileA(path, fmt, pTex, NULL) == S_OK) return true;
 			oapiWriteLog((char*)"NatSaveSurface(TEX):");
 			NatDumpResource(pResource);
 			return false;
@@ -273,14 +314,14 @@ bool NatSaveSurface(const char* file, LPDIRECT3DRESOURCE9 pResource)
 				pSrc->Release();
 				pTgt->Release();
 			}
-			if (D3DXSaveTextureToFile(file, fmt, pSys, NULL) == S_OK) {
+			if (D3DXSaveTextureToFile(path, fmt, pSys, NULL) == S_OK) {
 				pSys->Release();
 				return true;
 			}
 			pSys->Release();
 		}
 
-		if (D3DXSaveTextureToFileA(file, fmt, pTex, NULL) == S_OK) return true;
+		if (D3DXSaveTextureToFileA(path, fmt, pTex, NULL) == S_OK) return true;
 	}
 
 	oapiWriteLog((char*)"NatSaveSurface():");
@@ -333,7 +374,7 @@ SURFHANDLE NatCreateSurface(int width, int height, DWORD flags)
 		{
 			if (flags & OAPISURFACE_RENDER3D)
 			{
-				HR(pDev->CreateDepthStencilSurface(width, height, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, true, &pDepth, NULL));	
+				HR(pDev->CreateDepthStencilSurface(width, height, D3DFMT_D24X8, D3DMULTISAMPLE_NONE, 0, true, &pDepth, NULL));	
 			}
 			return SURFHANDLE(new SurfNative(pTex, flags, pDepth));
 		}
@@ -349,7 +390,7 @@ SURFHANDLE NatCreateSurface(int width, int height, DWORD flags)
 		{
 			if (flags & OAPISURFACE_RENDER3D)
 			{
-				HR(pDev->CreateDepthStencilSurface(width, height, D3DFMT_D24S8, Multi, 0, true, &pDepth, NULL));
+				HR(pDev->CreateDepthStencilSurface(width, height, D3DFMT_D24X8, Multi, 0, true, &pDepth, NULL));
 			}
 			return SURFHANDLE(new SurfNative(pSurf, flags, pDepth));
 		}
@@ -500,6 +541,7 @@ SurfNative::SurfNative(LPDIRECT3DRESOURCE9 pRes, DWORD flags, LPDIRECT3DSURFACE9
 	memset(&DC, 0, sizeof(DC));
 
 	strcpy_s(name, sizeof(name), "null");
+	strcpy_s(path, sizeof(path), "null");
 
 	type = pResource->GetType();
 	
@@ -538,7 +580,8 @@ SurfNative::SurfNative(SurfNative* pOrigin)
 
 	for (int i = 0; i < MAP_MAX_COUNT; i++) pMap[i] = pOrigin->pMap[i];
 
-	strcpy_s(name, 128, pOrigin->name);
+	strcpy_s(name, sizeof(name), pOrigin->name);
+	strcpy_s(path, sizeof(path), pOrigin->path);
 }
 
 
@@ -689,9 +732,19 @@ bool SurfNative::IsPowerOfTwo() const
 //
 void SurfNative::SetName(const char* n)
 {
-	strcpy_s(name, 128, n);
+	strcpy_s(name, sizeof(name), n);
 	int i = -1;
 	while (name[++i] != 0) if (name[i] == '/') name[i] = '\\';
+}
+
+
+// -----------------------------------------------------------------------------------------------
+//
+void SurfNative::SetPath(const char* n)
+{
+	strcpy_s(path, sizeof(path), n);
+	int i = -1;
+	while (path[++i] != 0) if (path[i] == '/') path[i] = '\\';
 }
 
 
@@ -924,13 +977,6 @@ bool SurfNative::Decompress()
 		if (desc.Format == D3DFMT_DXT5) Format = D3DFMT_A8R8G8B8;
 		if (desc.Format == D3DFMT_DXT3) Format = D3DFMT_A8R8G8B8;
 
-		char path[MAX_PATH];
-
-		if (!g_client->TexturePath(name, path)) {
-			oapiWriteLogV("SurfNative::Reload() File Not Found [%s]", path);
-			return false;
-		}
-
 		if (S_OK == D3DXCreateTextureFromFileExA(pDevice, path, desc.Width, desc.Height, Mipmaps, D3DUSAGE_RENDERTARGET, Format,
 			D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pDecomp))
 		{
@@ -962,7 +1008,6 @@ bool SurfNative::Decompress()
 //
 bool SurfNative::DeClone()
 {
-	char path[MAX_PATH];
 
 	if (!IsClone()) return false;
 	else
@@ -981,11 +1026,6 @@ bool SurfNative::DeClone()
 		if (desc.Format == D3DFMT_DXT1) Format = D3DFMT_X8R8G8B8;
 		if (desc.Format == D3DFMT_DXT5) Format = D3DFMT_A8R8G8B8;
 		if (desc.Format == D3DFMT_DXT3) Format = D3DFMT_A8R8G8B8;
-
-		if (!g_client->TexturePath(name, path)) {
-			oapiWriteLogV("SurfNative::DeClone() File Not Found [%s]", path);
-			return false;
-		}
 
 		if (S_OK == D3DXCreateTextureFromFileExA(pDevice, path, desc.Width, desc.Height, Mipmaps, D3DUSAGE_RENDERTARGET, Format,
 			D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex))
@@ -1015,13 +1055,6 @@ void SurfNative::Reload()
 	SAFE_RELEASE(pResource);
 	for (int i = 0; i < ARRAYSIZE(pMap); i++) SAFE_RELEASE(pMap[i]);
 
-	char path[MAX_PATH];
-
-	if (!g_client->TexturePath(name, path)) {
-		oapiWriteLogV("SurfNative::Reload() File Not Found [%s]", path);
-		return;
-	}
-
 	if (Flags == OAPISURFACE_TEXTURE)
 	{
 		D3DXIMAGE_INFO info;
@@ -1035,15 +1068,15 @@ void SurfNative::Reload()
 			if (S_OK == D3DXCreateTextureFromFileExA(g_client->GetDevice(), path, info.Width, info.Height, Mips, 0,
 				D3DFMT_FROM_FILE, D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, (LPDIRECT3DTEXTURE9 *)&pResource))
 			{
-				AddMap(MAP_HEAT, NatLoadSpecialTexture(name, "heat"));
-				AddMap(MAP_NORMAL, NatLoadSpecialTexture(name, "norm"));
-				AddMap(MAP_SPECULAR, NatLoadSpecialTexture(name, "spec"));
-				AddMap(MAP_EMISSION, NatLoadSpecialTexture(name, "emis"));
-				AddMap(MAP_ROUGHNESS, NatLoadSpecialTexture(name, "rghn"));
-				AddMap(MAP_METALNESS, NatLoadSpecialTexture(name, "metal"));
-				AddMap(MAP_REFLECTION, NatLoadSpecialTexture(name, "refl"));
-				AddMap(MAP_TRANSLUCENCE, NatLoadSpecialTexture(name, "transl"));
-				AddMap(MAP_TRANSMITTANCE, NatLoadSpecialTexture(name, "transm"));
+				AddMap(MAP_HEAT, NatLoadSpecialTexture(name, "_heat"));
+				AddMap(MAP_NORMAL, NatLoadSpecialTexture(name, "_norm"));
+				AddMap(MAP_SPECULAR, NatLoadSpecialTexture(name, "_spec"));
+				AddMap(MAP_EMISSION, NatLoadSpecialTexture(name, "_emis"));
+				AddMap(MAP_ROUGHNESS, NatLoadSpecialTexture(name, "_rghn"));
+				AddMap(MAP_METALNESS, NatLoadSpecialTexture(name, "_metal"));
+				AddMap(MAP_REFLECTION, NatLoadSpecialTexture(name, "_refl"));
+				AddMap(MAP_TRANSLUCENCE, NatLoadSpecialTexture(name, "_transl"));
+				AddMap(MAP_TRANSMITTANCE, NatLoadSpecialTexture(name, "_transm"));
 			}
 		}
 	}
@@ -1150,11 +1183,20 @@ bool NatCreateName(char* out, int mlen, const char* fname, const char* id)
 	char* p = strrchr(buffe, '.');
 	if (p != NULL) {
 		*p = '\0';
-		sprintf_s(out, mlen, "%s_%s.%s", buffe, id, ++p);
+		sprintf_s(out, mlen, "%s%s.%s", buffe, id, ++p);
 	}
 	return (p != NULL);
 }
 
+// -----------------------------------------------------------------------------------------------
+//
+bool NatIsTypeOf(const char* fname, const char* id)
+{
+	char buf[32];
+	sprintf_s(buf, 32, "_%s.dds", id);
+	const char* p = strstr(fname, id);
+	return (p != NULL);
+}
 
 // -----------------------------------------------------------------------------------------------
 //

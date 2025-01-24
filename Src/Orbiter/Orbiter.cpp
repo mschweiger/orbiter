@@ -1230,8 +1230,11 @@ void Orbiter::InsertVessel (Vessel *vessel)
 	for (auto it = m_Plugin.begin(); it != m_Plugin.end(); it++)
 		it->pModule->clbkNewVessel((OBJHANDLE)vessel);
 
-	if (gclient)
+	if (gclient) {
 		gclient->clbkNewVessel((OBJHANDLE)vessel);
+		gclient->clbkScenarioChanged((OBJHANDLE)vessel, ScnChgEvent::Added);
+	}
+
 
 	if (pDlgMgr) pDlgMgr->BroadcastMessage (MSG_CREATEVESSEL, vessel);
 	//if (gclient) gclient->clbkDialogBroadcast (MSG_CREATEVESSEL, vessel);
@@ -1284,8 +1287,11 @@ bool Orbiter::KillVessels ()
 			for (auto it = m_Plugin.begin(); it != m_Plugin.end(); it++)
 				it->pModule->clbkDeleteVessel((OBJHANDLE)vessel);
 
-			if (gclient)
+			if (gclient) {
 				gclient->clbkDeleteVessel((OBJHANDLE)vessel);
+				gclient->clbkScenarioChanged((OBJHANDLE)vessel, ScnChgEvent::Deleted);
+			}
+
 			// broadcast vessel destruction to all vessels
 			g_psys->BroadcastVessel (MSG_KILLVESSEL, vessel);
 			// broadcast vessel destruction to all MFDs

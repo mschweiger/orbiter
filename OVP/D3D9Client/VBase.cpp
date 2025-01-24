@@ -386,22 +386,22 @@ bool vBase::RenderSurface(LPDIRECT3DDEVICE9 dev)
 	if (!active) return false;
 	if (!IsVisible()) return false;
 
-	pCurrentVisual = this;
+	g_pCurrentVisual = this;
 
 	// render tiles
 	if (tilemesh) {
-		uCurrentMesh = 0; // Used for debugging
+		g_uCurrentMesh = 0; // Used for debugging
 		tilemesh->SetSunLight(&sunLight);
 		tilemesh->RenderBaseTile(&mWorld);
-		++uCurrentMesh;
+		++g_uCurrentMesh;
 	}
 
 	// render generic objects under shadows
 	if (nstructure_bs) {
 		for (DWORD i = 0; i < nstructure_bs; ++i) {
 			structure_bs[i]->SetSunLight(&sunLight);
-			structure_bs[i]->Render(&mWorld, RENDER_BASEBS);
-			++uCurrentMesh;
+			structure_bs[i]->Render(&mWorld, nullptr, RENDER_BASEBS);
+			++g_uCurrentMesh;
 		}
 	}
 
@@ -416,11 +416,11 @@ bool vBase::RenderStructures(LPDIRECT3DDEVICE9 dev)
 	if (!active) return false;
 	if (!IsVisible()) return false;
 
-	pCurrentVisual = this;
-	uCurrentMesh = 0; // Used for debugging
+	g_pCurrentVisual = this;
+	g_uCurrentMesh = 0; // Used for debugging
 
-	if (tilemesh) uCurrentMesh++;
-	uCurrentMesh += nstructure_bs;
+	if (tilemesh) g_uCurrentMesh++;
+	g_uCurrentMesh += nstructure_bs;
 
 	// render generic objects above shadows
 	for (DWORD i=0; i<nstructure_as; i++) {
@@ -428,8 +428,8 @@ bool vBase::RenderStructures(LPDIRECT3DDEVICE9 dev)
 		FVECTOR3 qw = TransformCoord(bs, mWorld);
 		D3D9Sun sp = vP->GetObjectAtmoParams(qw._V() + vP->CameraPos());
 		structure_as[i]->SetSunLight(&sp);
-		structure_as[i]->Render(&mWorld, RENDER_BASE);
-		++uCurrentMesh;
+		structure_as[i]->Render(&mWorld, nullptr, RENDER_BASE);
+		++g_uCurrentMesh;
 	}
 	return true;
 }
@@ -442,7 +442,7 @@ void vBase::RenderRunwayLights(LPDIRECT3DDEVICE9 dev)
 	if (!active) return;
 	if (!IsVisible()) return;
 
-	pCurrentVisual = this;
+	g_pCurrentVisual = this;
 
 	for(int i=0; i<numRunwayLights; i++)
 	{
@@ -475,7 +475,7 @@ void vBase::RenderGroundShadow(LPDIRECT3DDEVICE9 dev, float alpha)
 	if (!IsVisible()) return;
 	if (Config->TerrainShadowing == 0) return;
 
-	pCurrentVisual = this;
+	g_pCurrentVisual = this;
 
 	VECTOR3 sd;
 	oapiGetGlobalPos(hObj, &sd); normalise(sd);

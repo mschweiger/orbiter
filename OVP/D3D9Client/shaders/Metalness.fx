@@ -4,6 +4,7 @@
 // ==============================================================
 
 #define eps 0.001f
+//#define _VISCASCADES
 
 // ============================================================================
 // Vertex shader for physics based rendering
@@ -126,6 +127,7 @@ void Transmittance(in out float4 cDiff, float uLN, float uLC, float2 uv, float3 
 	cDiff.rgb += cTransm.rgb * (sunSpotFromBehind * cSun);
 }
 
+#include "BakedVC.fx"
 
 // ============================================================================
 // A Shader for a typical "Metalness" PBR workflow.
@@ -136,7 +138,7 @@ float4 MetalnessPS(float4 sc : VPOS, PBRData frg) : COLOR
 	float3 nrmT;
 	float3 nrmW;
 	float3 cEmis;
-	float4 cSpecularMap;																							// Added
+	float4 cSpecularMap;
 	float4 cDiff;
 	float  fHeat;
 	float  fSmth, fMetal;
@@ -149,6 +151,11 @@ float4 MetalnessPS(float4 sc : VPOS, PBRData frg) : COLOR
 
 	if (gTextured) cDiff = tex2D(WrapS, frg.tex0.xy);
 	else		   cDiff = 1;
+
+#if defined(_VISCASCADES)
+	cDiff.rgb *= VisualizeCascades(frg.shdH);
+	return cDiff;
+#endif
 
 	if (gOITEnable) if (cDiff.a < 0.5f) clip(-1);
 
@@ -209,8 +216,8 @@ float4 MetalnessPS(float4 sc : VPOS, PBRData frg) : COLOR
 	// Typical compatibility requirements
 	// ======================================================================
 
-	if (gNoColor) cDiff.rgb = 1;
-	cDiff = saturate(cDiff * float4(gMtrl.diffuse.rgb, gMtrlAlpha));
+	cDiff.a = saturate(cDiff.a * gMtrlAlpha);
+	cDiff.rgb = saturate(cDiff.rgb + gNoColor.rgb);
 	
 
 	// ======================================================================
@@ -284,7 +291,12 @@ float4 MetalnessPS(float4 sc : VPOS, PBRData frg) : COLOR
 	// Add vessel self-shadows
 	// ======================================================================
 #if SHDMAP > 0
-	cSun *= smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
+	if (gCockpit) {
+		cSun *= smoothstep(0, 0.72, ComputeShadowVC(frg.shdH, dLN, sc));
+	}
+	else {
+		cSun *= smoothstep(0, 0.72, ComputeShadow(frg.shdH, dLN, sc));
+	}
 #endif
 	
 
@@ -345,7 +357,10 @@ float4 MetalnessPS(float4 sc : VPOS, PBRData frg) : COLOR
 	// Add a faint diffuse hue for rough metals. Rough metal doesn't look good if it's totally black
 	fA += fRgh * fMetal * 0.05f;
 
-	float3 zD = cDiff.rgb * fA * LightFXSq(Sq(cSun * fR * dLN) + cDiffLocal + Sq(cAmbient) + Sq(gMtrl.emissive.rgb));
+	// Light terms
+	float3 zL = Sq(cSun * fR * dLN) + cDiffLocal + Sq(cAmbient);
+
+	float3 zD = cDiff.rgb * fA * LightFXSq(gMtrl.diffuse.rgb * zL + Sq(gMtrl.emissive.rgb));
 
 	// Combine specular terms
 	// float3 zS = cS * (cSun * dLN) + cSpec * LightFX(cSpecLocal) * 0.5f;

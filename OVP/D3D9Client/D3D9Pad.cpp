@@ -796,7 +796,7 @@ Font *D3D9Pad::SetFont(Font *font)
 
 #ifdef SKPDBG 
 	LOGFONTA lf;
-	GetObjectA(font->GetGDIFont(), sizeof(LOGFONT), &lf);
+	GetObjHandle(font->GetGDIFont(), sizeof(LOGFONT), &lf);
 	Log("SetFont(%s) Face=[%s] Height=%d Weight=%d", _PTR(font), lf.lfFaceName, lf.lfHeight, lf.lfWeight);
 #endif
 	// No "Change" falgs required here, covered in SetFontTextureNative()

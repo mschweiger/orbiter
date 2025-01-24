@@ -233,15 +233,6 @@ bool CopyBuffer(LPDIRECT3DRESOURCE9 _pDst, LPDIRECT3DRESOURCE9 _pSrc)
 	return false;
 }
 
-void LogMatrix(D3DXMATRIX *pM, const char *name)
-{
-	LogAlw("%s", name);
-	LogAlw("[%9.9g, %9.9g, %9.9g, %9.9g]", pM->_11, pM->_12, pM->_13, pM->_14);
-	LogAlw("[%9.9g, %9.9g, %9.9g, %9.9g]", pM->_21, pM->_22, pM->_23, pM->_24);
-	LogAlw("[%9.9g, %9.9g, %9.9g, %9.9g]", pM->_31, pM->_32, pM->_33, pM->_34);
-	LogAlw("[%9.9g, %9.9g, %9.9g, %9.9g]", pM->_41, pM->_42, pM->_43, pM->_44);
-}
-
 inline D3DXVECTOR4 CV2VEC4(const D3DCOLORVALUE &in)
 {
 	return D3DXVECTOR4(in.r, in.g, in.b, in.a);
@@ -317,17 +308,6 @@ void CreateDefaultMat(D3D9MatExt *pOut)
 	pOut->ModFlags = 0;
 }
 
-void D3D9TuneInit(D3D9Tune *pTune)
-{
-	pTune->Albedo = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Emis = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Spec = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Refl = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Transl = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Transm = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Norm = D3DXCOLOR(1, 1, 1, 1);
-	pTune->Rghn = D3DXCOLOR(1, 1, 1, 1);
-}
 
 void SurfaceLighting(D3D9Sun *light, OBJHANDLE hP, OBJHANDLE hO, float ao)
 {
@@ -1974,14 +1954,14 @@ HANDLE ShaderClass::GetVSHandle(const char* name)
 
 
 
-void ShaderClass::SetTexture(const char* name, LPDIRECT3DTEXTURE9 pTex, UINT flags, UINT aniso)
+void ShaderClass::SetTexture(const char* name, LPDIRECT3DBASETEXTURE9 pTex, UINT flags, UINT aniso)
 {
 	D3DXHANDLE hVar = pPSCB->GetConstantByName(NULL, name);
 	SetTexture((HANDLE)hVar, pTex, flags, aniso);
 }
 
 
-void ShaderClass::SetTextureVS(const char* name, LPDIRECT3DTEXTURE9 pTex, UINT flags, UINT aniso)
+void ShaderClass::SetTextureVS(const char* name, LPDIRECT3DBASETEXTURE9 pTex, UINT flags, UINT aniso)
 {
 	D3DXHANDLE hVar = pVSCB->GetConstantByName(NULL, name);
 	SetTextureVS((HANDLE)hVar, pTex, flags, aniso);
@@ -2019,7 +1999,7 @@ void ShaderClass::SetVSConstants(const char* name, void* data, UINT bytes)
 	
 
 
-void ShaderClass::SetTexture(HANDLE hVar, LPDIRECT3DTEXTURE9 pTex, UINT flags, UINT aniso)
+void ShaderClass::SetTexture(HANDLE hVar, LPDIRECT3DBASETEXTURE9 pTex, UINT flags, UINT aniso)
 {
 #ifdef SHDCLSDBG
 	if (!hVar) {
@@ -2044,7 +2024,7 @@ void ShaderClass::SetTexture(HANDLE hVar, LPDIRECT3DTEXTURE9 pTex, UINT flags, U
 }
 
 
-void ShaderClass::SetTextureVS(HANDLE hVar, LPDIRECT3DTEXTURE9 pTex, UINT flags, UINT aniso)
+void ShaderClass::SetTextureVS(HANDLE hVar, LPDIRECT3DBASETEXTURE9 pTex, UINT flags, UINT aniso)
 {
 #ifdef SHDCLSDBG
 	if (!hVar) {

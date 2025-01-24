@@ -713,6 +713,11 @@ void VideoTab::InitSetupDialog(HWND hWnd)
 	//SendDlgItemMessageA(hWnd, IDC_SHADOWFILTER, CB_ADDSTRING, 0, (LPARAM)"40 samples");
 	//SendDlgItemMessageA(hWnd, IDC_SHADOWFILTER, CB_ADDSTRING, 0, (LPARAM)"40s dither");
 
+	SendDlgItemMessage(hWnd, IDC_CASCOUNT, CB_RESETCONTENT, 0, 0);
+	SendDlgItemMessageA(hWnd, IDC_CASCOUNT, CB_ADDSTRING, 0, (LPARAM)"5m  1-cas low quality");
+	SendDlgItemMessageA(hWnd, IDC_CASCOUNT, CB_ADDSTRING, 0, (LPARAM)"8m  2-cas hight quality");
+	SendDlgItemMessageA(hWnd, IDC_CASCOUNT, CB_ADDSTRING, 0, (LPARAM)"24m 3-cas hight quality");
+
 	SendDlgItemMessage(hWnd, IDC_TERRAIN, CB_RESETCONTENT, 0, 0);
 	SendDlgItemMessageA(hWnd, IDC_TERRAIN, CB_ADDSTRING, 0, (LPARAM)"None");
 	SendDlgItemMessageA(hWnd, IDC_TERRAIN, CB_ADDSTRING, 0, (LPARAM)"Stencil");
@@ -807,6 +812,7 @@ void VideoTab::InitSetupDialog(HWND hWnd)
 	SendDlgItemMessage(hWnd, IDC_SHADOWFILTER, CB_SETCURSEL, Config->ShadowFilter, 0);
 	SendDlgItemMessage(hWnd, IDC_TERRAIN, CB_SETCURSEL, Config->TerrainShadowing, 0);
 	SendDlgItemMessage(hWnd, IDC_GUIMODE, CB_SETCURSEL, Config->gcGUIMode, 0);
+	SendDlgItemMessage(hWnd, IDC_CASCOUNT, CB_SETCURSEL, Config->VCCascadeCount - 1, 0);
 
 	SendDlgItemMessage(hWnd, IDC_DEMAND, BM_SETCHECK, Config->PlanetPreloadMode==0, 0);
 	SendDlgItemMessage(hWnd, IDC_SRFPRELOAD, BM_SETCHECK, Config->PlanetPreloadMode==1, 0);
@@ -879,9 +885,11 @@ void VideoTab::SaveSetupState(HWND hWnd)
 	Config->ShadowMapMode = (int)SendDlgItemMessage(hWnd, IDC_SELFSHADOWS, CB_GETCURSEL, 0, 0);
 	Config->ShadowFilter  = (int)SendDlgItemMessage(hWnd, IDC_SHADOWFILTER, CB_GETCURSEL, 0, 0);
 	Config->TerrainShadowing = (int)SendDlgItemMessage(hWnd, IDC_TERRAIN, CB_GETCURSEL, 0, 0);
-	Config->gcGUIMode	  = (int)SendDlgItemMessage(hWnd, IDC_GUIMODE, CB_GETCURSEL, 0, 0);
+	Config->gcGUIMode = (int)SendDlgItemMessage(hWnd, IDC_GUIMODE, CB_GETCURSEL, 0, 0);
+	Config->VCCascadeCount = (int)SendDlgItemMessage(hWnd, IDC_CASCOUNT, CB_GETCURSEL, 0, 0) + 1;
 	Config->MeshRes		  = int(SendDlgItemMessage(hWnd, IDC_MESHRES, CB_GETCURSEL, 0, 0));
 	Config->MaxTiles	  = int(SendDlgItemMessage(hWnd, IDC_TILECOUNT, CB_GETCURSEL, 0, 0));
+
 
 	if (Config->gcGUIMode == 1) Config->gcGUIMode = 0;
 

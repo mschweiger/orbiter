@@ -64,7 +64,6 @@ D3DXHANDLE D3D9Effect::eGT = 0;			// Mesh group transformation matrix
 D3DXHANDLE D3D9Effect::eMat = 0;		// Material
 D3DXHANDLE D3D9Effect::eWater = 0;		// Water
 D3DXHANDLE D3D9Effect::eMtrl = 0;
-D3DXHANDLE D3D9Effect::eTune = 0;
 D3DXHANDLE D3D9Effect::eSun = 0;
 D3DXHANDLE D3D9Effect::eNight = 0;
 D3DXHANDLE D3D9Effect::eLights = 0;		// Additional light sources
@@ -75,15 +74,16 @@ D3DXHANDLE D3D9Effect::eTex3 = 0;		// Tertiary texture
 D3DXHANDLE D3D9Effect::eSpecMap = 0;
 D3DXHANDLE D3D9Effect::eEmisMap = 0;
 D3DXHANDLE D3D9Effect::eEnvMapA = 0;
-D3DXHANDLE D3D9Effect::eEnvMapB = 0;
 D3DXHANDLE D3D9Effect::eReflMap = 0;
 D3DXHANDLE D3D9Effect::eRghnMap = 0;
 D3DXHANDLE D3D9Effect::eMetlMap = 0;
 D3DXHANDLE D3D9Effect::eHeatMap = 0;
-D3DXHANDLE D3D9Effect::eShadowMap = 0;
 D3DXHANDLE D3D9Effect::eTranslMap = 0;
 D3DXHANDLE D3D9Effect::eTransmMap = 0;
 D3DXHANDLE D3D9Effect::eIrradMap = 0;
+D3DXHANDLE D3D9Effect::eAmbientMap = 0;
+D3DXHANDLE D3D9Effect::eCombinedMap = 0;
+D3DXHANDLE D3D9Effect::eCombSunMap = 0;
 
 D3DXHANDLE D3D9Effect::eSpecularMode = 0;
 D3DXHANDLE D3D9Effect::eHazeMode = 0;
@@ -95,6 +95,8 @@ D3DXHANDLE D3D9Effect::eMix = 0;		// FLOAT Auxiliary factor/multiplier
 D3DXHANDLE D3D9Effect::eFogDensity = 0;	// 
 D3DXHANDLE D3D9Effect::ePointScale = 0;
 D3DXHANDLE D3D9Effect::eSHD = 0;
+D3DXHANDLE D3D9Effect::eSHDPx = 0;
+D3DXHANDLE D3D9Effect::eSHDSubRect = 0;
 
 D3DXHANDLE D3D9Effect::eAtmColor = 0;
 D3DXHANDLE D3D9Effect::eProxySize = 0;
@@ -113,22 +115,24 @@ D3DXHANDLE D3D9Effect::eRghnSw = 0;		// BOOL
 D3DXHANDLE D3D9Effect::eShadowToggle = 0;	// BOOL
 D3DXHANDLE D3D9Effect::eEnvMapEnable = 0;	// BOOL
 D3DXHANDLE D3D9Effect::eInSpace = 0;	// BOOL
-D3DXHANDLE D3D9Effect::eNoColor = 0;	// BOOL
 D3DXHANDLE D3D9Effect::eLightsEnabled = 0;	// BOOL	
-D3DXHANDLE D3D9Effect::eTuneEnabled = 0; // BOOL
 D3DXHANDLE D3D9Effect::eBaseBuilding = 0; // BOOL
+D3DXHANDLE D3D9Effect::eCockpit = 0;	// BOOL
 D3DXHANDLE D3D9Effect::eOITEnable = 0; // BOOL
 // --------------------------------------------------------------
 D3DXHANDLE D3D9Effect::eExposure = 0;
 D3DXHANDLE D3D9Effect::eCameraPos = 0;	
 D3DXHANDLE D3D9Effect::eNorth = 0;
 D3DXHANDLE D3D9Effect::eEast = 0;
+D3DXHANDLE D3D9Effect::eVCAmbient = 0;
 D3DXHANDLE D3D9Effect::eDistScale = 0;
 D3DXHANDLE D3D9Effect::eRadius = 0;
 D3DXHANDLE D3D9Effect::eAttennuate = 0;
 D3DXHANDLE D3D9Effect::eInScatter = 0;
 D3DXHANDLE D3D9Effect::eInvProxySize = 0;
 D3DXHANDLE D3D9Effect::eGlowConst = 0;
+D3DXHANDLE D3D9Effect::eNoColor = 0;
+D3DXHANDLE D3D9Effect::eVCIrrad = 0;
 // --------------------------------------------------------------
 D3DXHANDLE D3D9Effect::eGlobalAmb = 0;	 
 D3DXHANDLE D3D9Effect::eSunAppRad = 0;	 
@@ -338,8 +342,12 @@ void D3D9Effect::D3D9TechInit(D3D9Client *_gc, LPDIRECT3DDEVICE9 _pDev, const ch
 	if (Config->ShadowFilter >= 3)  sprintf_s((char*)macro[5].Definition, 32, "%f", 0.0285f);
 	else							sprintf_s((char*)macro[5].Definition, 32, "%f", 1.0f / 27.0f); // 0.04634f);
 	// ------------------------------------------------------------------------------
+	macro[6].Name = "CASCOUNT";
+	macro[6].Definition = new char[32];
+	sprintf_s((char*)macro[6].Definition, 32, "%d", Config->VCCascadeCount);
+	// ------------------------------------------------------------------------------
 
-	int m = 6;
+	int m = 7;
 	if (Config->EnableGlass) macro[m++].Name = "_GLASS";
 	if (Config->EnableMeshDbg) macro[m++].Name = "_DEBUG";
 	if (Config->EnvMapMode) macro[m++].Name = "_ENVMAP"; 
@@ -426,13 +434,14 @@ void D3D9Effect::D3D9TechInit(D3D9Client *_gc, LPDIRECT3DDEVICE9 _pDev, const ch
 	eSwitch		  = FX->GetParameterByName(0,"gPBRSw");
 	eRghnSw		  = FX->GetParameterByName(0,"gRghnSw");
 	eInSpace	  = FX->GetParameterByName(0,"gInSpace");			
-	eNoColor	  = FX->GetParameterByName(0,"gNoColor");	
 	eLightsEnabled = FX->GetParameterByName(0,"gLightsEnabled");	
-	eTuneEnabled  = FX->GetParameterByName(0,"gTuneEnabled");
 	eBaseBuilding = FX->GetParameterByName(0,"gBaseBuilding");
+	eCockpit	  = FX->GetParameterByName(0,"gCockpit");
 	eOITEnable	  = FX->GetParameterByName(0,"gOITEnable");
 
-	// General parameters -------------------------------------------------- 
+	// General parameters --------------------------------------------------
+	eNoColor	  = FX->GetParameterByName(0, "gNoColor");
+	eVCIrrad	  = FX->GetParameterByName(0, "gVCIrrad");
 	eSpecularMode = FX->GetParameterByName(0,"gSpecMode");
 	eLights		  = FX->GetParameterByName(0,"gLights");
 	eColor		  = FX->GetParameterByName(0,"gColor");
@@ -443,12 +452,15 @@ void D3D9Effect::D3D9TechInit(D3D9Client *_gc, LPDIRECT3DDEVICE9 _pDev, const ch
 	eCameraPos	  = FX->GetParameterByName(0,"gCameraPos");
 	eNorth		  = FX->GetParameterByName(0,"gNorth");
 	eEast		  = FX->GetParameterByName(0,"gEast");
+	eVCAmbient	  = FX->GetParameterByName(0,"gVCAmbient");
 	ePointScale   = FX->GetParameterByName(0,"gPointScale");
 	eMix		  = FX->GetParameterByName(0,"gMix");
 	eTime		  = FX->GetParameterByName(0,"gTime");
 	eMtrlAlpha	  = FX->GetParameterByName(0,"gMtrlAlpha");
 	eGlowConst    = FX->GetParameterByName(0,"gGlowConst");
 	eSHD		  = FX->GetParameterByName(0,"gSHD");
+	eSHDPx		  = FX->GetParameterByName(0,"gSHDPx");
+	eSHDSubRect	  = FX->GetParameterByName(0,"gSHDSubRect");
 	eKernel		  = FX->GetParameterByName(0,"kernel");
 	eAtmoParams	  = FX->GetParameterByName(0,"gAtmo");
 	// ----------------------------------------------------------------------
@@ -461,7 +473,6 @@ void D3D9Effect::D3D9TechInit(D3D9Client *_gc, LPDIRECT3DDEVICE9 _pDev, const ch
 	eMat		  = FX->GetParameterByName(0,"gMat");
 	eWater		  = FX->GetParameterByName(0,"gWater");
 	eMtrl		  = FX->GetParameterByName(0,"gMtrl");
-	eTune		  = FX->GetParameterByName(0,"gTune");
 	// ----------------------------------------------------------------------
 	eTex0		  = FX->GetParameterByName(0,"gTex0");
 	eTex1		  = FX->GetParameterByName(0,"gTex1");
@@ -469,15 +480,16 @@ void D3D9Effect::D3D9TechInit(D3D9Client *_gc, LPDIRECT3DDEVICE9 _pDev, const ch
 	eSpecMap	  = FX->GetParameterByName(0,"gSpecMap");
 	eEmisMap	  = FX->GetParameterByName(0,"gEmisMap");
 	eEnvMapA	  = FX->GetParameterByName(0,"gEnvMapA");
-	eEnvMapB	  = FX->GetParameterByName(0,"gEnvMapB");
 	eReflMap	  = FX->GetParameterByName(0,"gReflMap");
 	eRghnMap	  = FX->GetParameterByName(0,"gRghnMap");
 	eMetlMap	  = FX->GetParameterByName(0,"gMetlMap");
 	eHeatMap	  = FX->GetParameterByName(0,"gHeatMap");
-	eShadowMap	  = FX->GetParameterByName(0,"gShadowMap");
 	eTranslMap	  = FX->GetParameterByName(0, "gTranslMap");
 	eTransmMap	  = FX->GetParameterByName(0, "gTransmMap");
 	eIrradMap     = FX->GetParameterByName(0,"gIrradianceMap");
+	eAmbientMap	  = FX->GetParameterByName(0, "gAmbientMap");
+	eCombinedMap  = FX->GetParameterByName(0, "gCombinedMap");
+	eCombSunMap	  = FX->GetParameterByName(0, "gCombinedSunMap");
 
 	// Atmosphere -----------------------------------------------------------
 	eGlobalAmb	  = FX->GetParameterByName(0,"gGlobalAmb");

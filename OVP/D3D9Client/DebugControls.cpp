@@ -17,7 +17,9 @@
 #include "Mesh.h"
 #include "MaterialMgr.h"
 #include "VectorHelpers.h"
+#include "OapiExtension.h"
 #include <stdio.h>
+#include <sstream>
 
 enum scale { LIN, SQRT, SQR };
 
@@ -34,6 +36,10 @@ extern D3D9Client *g_client;
 
 namespace DebugControls {
 
+DbgDisplay dbgdsp = {};
+int ambdir = -1;
+int bkl_id = 0;
+int probe_id = -1;
 DWORD dwGFX, dwCmd, nMesh, nGroup, sMesh, sGroup, debugFlags, dspMode, camMode, SelColor, sEmitter;
 double camSpeed;
 float cpr, cpg, cpb, cpa;
@@ -44,6 +50,7 @@ HWND hGfxDlg = NULL;
 HWND hDlg = NULL;
 HWND hDataWnd = NULL;
 vObject *vObj = NULL;
+D3D9Mesh* hSelMesh = NULL;
 std::string buffer("");
 std::string buffer2("");
 D3DXVECTOR3 PickLocation;
@@ -52,12 +59,15 @@ std::map<int, const LightEmitter*> Emitters;
 
 HWND hTipRed, hTipGrn, hTipBlu, hTipAlp;
 
-OPENFILENAMEA OpenTex, SaveTex;
+OPENFILENAMEA OpenTex, SaveTex, SaveMesh;
 char OpenFileName[255];
 char SaveFileName[255];
+char SaveMeshName[255];
+char SaveMeshTitle[255];
 
 void UpdateMaterialDisplay(bool bSetup=false);
 void SetGFXSliders();
+void UpdateLightsSlider();
 INT_PTR CALLBACK WndProcGFX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void OpenGFXDlgClbk(void *context);
 
@@ -84,8 +94,186 @@ struct _Params {
 };
 
 
-_Params Params[20] = { 0 };
+_Params Params[10] = { 0 };
 
+struct DbgMeshGrp {
+	vector<string> Lines;
+	vector<string> Vtx;
+	vector<string> Idx;
+};
+
+
+class DbgMesh
+{
+public:
+
+	DbgMesh(const char* file)
+	{
+		enum sec { header, group, geom, materials, textures  };
+		sec sec = header;
+		char buf[256];
+		DWORD ng = 0, nm = 0, nt = 0, nv = 0, ni = 0, gi = 0;
+		std::ifstream is(file);
+
+		if (is.is_open())
+		{
+			while (is.getline(buf, 256))
+			{
+				if (!_strnicmp(buf, "MATERIALS", 9)) sec = materials;
+				if (!_strnicmp(buf, "TEXTURES", 8)) sec = textures;
+					
+				if (sec == header) Header.push_back(buf);
+				if (sec == materials) Materials.push_back(buf);
+				if (sec == textures) Textures.push_back(buf);
+					
+				if (!_strnicmp(buf, "GROUPS", 6))
+				{				
+					if (sscanf(buf + 6, "%d", &ng) != 1) throw std::invalid_argument("End of file");
+					Groups.resize(ng);
+
+					for (gi = 0;gi<ng;gi++)
+					{
+						while (true)
+						{
+							if (!is.getline(buf, 256)) throw std::invalid_argument("End of file");
+							if (buf[0] != ';') Groups[gi].Lines.push_back(buf);
+
+							if (!_strnicmp(buf, "GEOM", 4))
+							{
+								if (sscanf(buf + 4, "%d %d", &nv, &ni) != 2) throw std::invalid_argument("End of file");
+								for (DWORD i = 0; i < nv; i++) {
+									if (!is.getline(buf, 256)) throw std::invalid_argument("End of file");
+									Groups[gi].Vtx.push_back(buf);
+								}
+								for (DWORD i = 0; i < ni; i++) {
+									if (!is.getline(buf, 256)) throw std::invalid_argument("End of file");
+									Groups[gi].Idx.push_back(buf);
+								}
+								break;
+							}
+						}
+					}
+				}
+			}
+			is.close();
+		}
+		else {
+			LogErr("[MeshDebug] Failed to Open a Mesh [%s]", file);
+		}
+	}
+
+	~DbgMesh()
+	{
+
+	}
+
+	void Save(const char* file)
+	{
+		std::ofstream os(file);
+
+		if (os.is_open())
+		{
+			int i = 0;
+			for (auto a : Header) os << a << "\n";
+			for (auto a : Groups) {
+				os << ";--- GroupIndex " << i << " ---\n"; i++;
+				for (auto b : a.Lines) os << b << "\n";
+				for (auto b : a.Vtx) os << b << "\n";
+				for (auto b : a.Idx) os << b << "\n";
+			}
+			for (auto a : Materials) os << a << "\n";
+			for (auto a : Textures) os << a << "\n";
+
+			os.close();
+		}
+	}
+
+	string GetGroupLabel(DWORD grp)
+	{
+		string x;
+		for (auto a : Groups[grp].Lines) {
+			if (a.find("LABEL") != string::npos) {
+				std::istringstream iss(a);
+				iss >> key >> x;
+				return x;
+			}
+		}
+		return string("");
+	}
+
+	void SetMeshFlags(DWORD f)
+	{
+		std::stringstream s;
+		s << std::hex << f;
+		for (auto &a : Header) {
+			if (a.find("MESHFLAGS") != string::npos) {
+				a = string("MESHFLAGS ") + s.str();
+				return;
+			}
+		}
+		Header.insert(Header.begin() + 1, string("MESHFLAGS ") + s.str());
+	}
+
+	void SetGroupFlags(DWORD grp, DWORD f)
+	{
+		std::stringstream s;
+		s << std::hex << f;
+		for (auto &a : Groups[grp].Lines) {
+			if (a.find("FLAG") != string::npos) {
+				a = string("FLAG ") + s.str();
+				return;
+			}
+		}
+		auto b = Groups[grp].Lines.begin();
+		Groups[grp].Lines.insert(b, string("FLAG ") + s.str());
+	}
+
+	void SetGroupMaterial(DWORD grp, DWORD x)
+	{
+		for (auto& a : Groups[grp].Lines) {
+			if (a.find("MATERIAL") != string::npos) {
+				a = string("MATERIAL ") + std::to_string(x + 1);
+				return;
+			}
+		}
+		auto b = Groups[grp].Lines.begin();
+		Groups[grp].Lines.insert(b, string("MATERIAL ") + std::to_string(x));
+	}
+
+	void SetGroupTexture(DWORD grp, DWORD x)
+	{
+		for (auto& a : Groups[grp].Lines) {
+			if (a.find("TEXTURE") != string::npos) {
+				a = string("TEXTURE ") + std::to_string(x);
+				return;
+			}
+		}
+		auto b = Groups[grp].Lines.begin();
+		Groups[grp].Lines.insert(b, string("TEXTURE ") + std::to_string(x));
+	}
+
+	void SetGroupLabel(DWORD grp, string x)
+	{
+		for (auto& a : Groups[grp].Lines) {
+			if (a.find("LABEL") != string::npos) {
+				a = string("LABEL ") + x;
+				return;
+			}
+		}
+		auto b = Groups[grp].Lines.begin();
+		Groups[grp].Lines.insert(b, string("LABEL ") + x);
+	}
+
+	vector<string> Header;
+	vector<string> Materials;
+	vector<string> Textures;
+	vector<DbgMeshGrp> Groups;
+	string key;
+};
+
+
+map<D3D9Mesh *, DbgMesh *> dbgMsh;
+DbgMesh* hDbgMsh = NULL;
 
 
 // ===========================================================================
@@ -209,6 +397,20 @@ void Create()
 	SaveTex.nMaxFileTitle = 0;
 	SaveTex.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
 
+	memset(&SaveMesh, 0, sizeof(OPENFILENAME));
+	memset(SaveMeshName, 0, sizeof(SaveMeshName));
+	memset(SaveMeshTitle, 0, sizeof(SaveMeshTitle));
+	
+	SaveMesh.lStructSize = sizeof(OPENFILENAME);
+	SaveMesh.lpstrFile = SaveMeshName;
+	SaveMesh.lpstrInitialDir = "Meshes\0";
+	SaveMesh.nMaxFile = sizeof(SaveMeshName);
+	SaveMesh.lpstrFilter = "*.msh\0";
+	SaveMesh.nFilterIndex = 0;
+	SaveMesh.lpstrFileTitle = SaveMeshTitle;
+	SaveMesh.nMaxFileTitle = 0;
+	SaveMesh.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+
 	PrmList.push_back(MatParams("Diffuse", 0));
 	PrmList.push_back(MatParams("Ambient", 1));
 	PrmList.push_back(MatParams("Specular", 2));
@@ -219,14 +421,6 @@ void Create()
 	PrmList.push_back(MatParams("Emission2", 7));
 	PrmList.push_back(MatParams("Metalness", 8));
 	PrmList.push_back(MatParams("SpecialFX", 9));
-	PrmList.push_back(MatParams("- - - - - -", 10));
-	PrmList.push_back(MatParams("Tune Albedo", 11));
-	PrmList.push_back(MatParams("Tune _Emis", 12));
-	PrmList.push_back(MatParams("Tune _Refl", 13));
-	PrmList.push_back(MatParams("Tune _Rghn", 14));
-	PrmList.push_back(MatParams("Tune _Transl", 15));
-	PrmList.push_back(MatParams("Tune _Transm", 16));
-	PrmList.push_back(MatParams("Tune _Spec", 17));
 }
 
 // =============================================================================================
@@ -257,10 +451,10 @@ int GetSceneDebug()
 
 // =============================================================================================
 //
-int GetSelectedEnvMap()
+DbgDisplay GetSelectedEnvMap()
 {
-	if (!hDlg) return 0;
-	return (int)SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_GETCURSEL, 0, 0);
+	if (!hDlg) return DbgDisplay(0);
+	return (DbgDisplay)SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_GETCURSEL, 0, 0);
 }
 
 // =============================================================================================
@@ -274,6 +468,7 @@ void Release()
 	if (dwGFX) oapiUnregisterCustomCmd(dwGFX);
 	dwCmd = NULL;
 	dwGFX = NULL;
+	for (auto x : dbgMsh) SAFE_DELETE(x.second);
 }
 
 // =============================================================================================
@@ -293,6 +488,13 @@ void UpdateFlags()
 	SETFLAG(debugFlags, DBG_FLAGS_DUALSIDED,	(SendDlgItemMessageA(hDlg, IDC_DBG_DUAL, BM_GETCHECK, 0, 0)==BST_CHECKED));
 	SETFLAG(debugFlags, DBG_FLAGS_PICK,			(SendDlgItemMessageA(hDlg, IDC_DBG_PICK, BM_GETCHECK, 0, 0)==BST_CHECKED));
 	SETFLAG(debugFlags, DBG_FLAGS_FPSLIM,		(SendDlgItemMessageA(hDlg, IDC_DBG_FPSLIM, BM_GETCHECK, 0, 0)==BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_NEARCLIP,		(SendDlgItemMessageA(hDlg, IDC_DBG_CLIPDIST, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_RENDEREXT,	(SendDlgItemMessageA(hDlg, IDC_DBG_EXTVC, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_PICKCURRENT,  (SendDlgItemMessageA(hDlg, IDC_DBG_PICKCURRENT, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_NOSUNAMB,		(SendDlgItemMessageA(hDlg, IDC_DBG_NOSUNAMB, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_NOPLNAMB,		(SendDlgItemMessageA(hDlg, IDC_DBG_NOPLNAMB, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_NODYNSUN,		(SendDlgItemMessageA(hDlg, IDC_DBG_NODYNSUN, BM_GETCHECK, 0, 0) == BST_CHECKED));
+	SETFLAG(debugFlags, DBG_FLAGS_VCZONES,		(SendDlgItemMessageA(hDlg, IDC_DBG_VCZONES, BM_GETCHECK, 0, 0) == BST_CHECKED));
 
 	Config->EnableLimiter = (int)((debugFlags&DBG_FLAGS_FPSLIM)>0);
 }
@@ -346,12 +548,18 @@ void InitMatList(WORD shader)
 	Dropdown.clear();
 
 	if (shader == SHADER_NULL) {
-		std::list<char> list = { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16, 17 };
+		std::list<char> list = { 0, 1, 2, 3, 4, 5, 6, 7, 9 };
 		for (auto x : list) Dropdown.push_back(PrmList[x]);
 		for (auto x : Dropdown) SendDlgItemMessageA(hDlg, IDC_DBG_MATPRP, CB_ADDSTRING, 0, (LPARAM)x.name.c_str());	
 	}
 
 	if (shader == SHADER_METALNESS) {
+		std::list<char> list = { 0, 3, 5, 7, 8, 9 };
+		for (auto x : list) Dropdown.push_back(PrmList[x]);
+		for (auto x : Dropdown) SendDlgItemMessageA(hDlg, IDC_DBG_MATPRP, CB_ADDSTRING, 0, (LPARAM)x.name.c_str());
+	}
+
+	if (shader == SHADER_BAKED_VC) {
 		std::list<char> list = { 0, 3, 5, 7, 8, 9 };
 		for (auto x : list) Dropdown.push_back(PrmList[x]);
 		for (auto x : Dropdown) SendDlgItemMessageA(hDlg, IDC_DBG_MATPRP, CB_ADDSTRING, 0, (LPARAM)x.name.c_str());
@@ -365,6 +573,7 @@ void InitMatList(WORD shader)
 		Params[6].var[2] = DefVar(10.0f, 4096.0f, SQRT, "Specular lobe size");
 		break;
 	case SHADER_METALNESS:
+	case SHADER_BAKED_VC:
 		Params[6].var[1] = DefVar(0, 1, LIN, "Fresnel effect attennuation 1.0 = disabled, 0.0 = max intensity");
 		Params[6].var[2].bUsed = false;
 		break;
@@ -377,6 +586,7 @@ void InitMatList(WORD shader)
 //
 void OpenDlgClbk(void *context)
 {
+	char buf[64];
 	DWORD idx = 0;
 	HWND l_hDlg = oapiOpenDialog(g_hInst, IDD_D3D9MESHDEBUG, WndProc);
 
@@ -405,6 +615,7 @@ void OpenDlgClbk(void *context)
 	SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_RESETCONTENT, 0, 0);
 	SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_ADDSTRING, 0, (LPARAM)"PBR (Old)");
 	SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_ADDSTRING, 0, (LPARAM)"Metalness PBR");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_ADDSTRING, 0, (LPARAM)"Baked VC");
 	SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_SETCURSEL, 0, 0);
 
 	SendDlgItemMessageA(hDlg, IDC_DBG_SCENEDBG, CB_RESETCONTENT, 0, 0);
@@ -436,23 +647,59 @@ void OpenDlgClbk(void *context)
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Blur 2");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Blur 3");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Blur 4");
-	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Irrad.Probe");
-	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"IrdPreItg");
-	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"ShadowMap");
+	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"SS_ShadowMap");
+	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"VC_ShadowMap");
+	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"EX_ShadowMap");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Irradiance");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"GlowMask");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"ScreenDepth");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"Normals");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"LightVisbil.");
+	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"BakedLightMap");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_ADDSTRING, 0, (LPARAM)"EclipseTbl");
 	SendDlgItemMessageA(hDlg, IDC_DBG_ENVMAP, CB_SETCURSEL, 0, 0);
+	
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_RESETCONTENT, 0, 0);
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"Omnidir");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Up (+y)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Down (-y)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Left (-x)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Right (+x)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Fwd (+z)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_ADDSTRING, 0, (LPARAM)"From Aft (-z)");
+	SendDlgItemMessageA(hDlg, IDC_DBG_AMBDIR, CB_SETCURSEL, 0, 0);
+
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_RESETCONTENT, 0, 0);
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_ADDSTRING, 0, (LPARAM)"Exterior");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_ADDSTRING, 0, (LPARAM)"Interior 0");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_ADDSTRING, 0, (LPARAM)"Interior 1");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_ADDSTRING, 0, (LPARAM)"Interior 2");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_ADDSTRING, 0, (LPARAM)"Interior 3");
+	SendDlgItemMessageA(hDlg, IDC_DBG_DATASRC, CB_SETCURSEL, 0, 0);
+
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_RESETCONTENT, 0, 0);
+	for (int i = 0; i < 16; i++) {
+		sprintf_s(buf, 64, "Baked_%d", i);
+		SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_ADDSTRING, 0, (LPARAM)buf);
+	}
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_ADDSTRING, 0, (LPARAM)"Ambient");
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_ADDSTRING, 0, (LPARAM)"DA.Curve");
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_ADDSTRING, 0, (LPARAM)"DA.Bounch");
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_ADDSTRING, 0, (LPARAM)"DA.Force");
+	SendDlgItemMessageA(hDlg, IDC_DBG_BKLID, CB_SETCURSEL, 0, 0);
 
 
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_VARA), "1.3");
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_VARB), "0.01");
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_VARC), "0.00");
 
-	// Speed slider
+	// BakedLights slider
+	SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_SETRANGEMAX, 1, 255);
+	SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_SETRANGEMIN, 1, 0);
+	SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_SETTICFREQ, 1, 0);
+	SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_SETPOS, 1, 0);
+
+	// Resolution bias slider
 	SendDlgItemMessage(hDlg, IDC_DBG_RESBIAS, TBM_SETRANGEMAX, 1,  10);
 	SendDlgItemMessage(hDlg, IDC_DBG_RESBIAS, TBM_SETRANGEMIN, 1, -10);
 	SendDlgItemMessage(hDlg, IDC_DBG_RESBIAS, TBM_SETTICFREQ, 1, 0);
@@ -546,75 +793,8 @@ void OpenDlgClbk(void *context)
 
 	// SpecialFX
 	Params[9].var[0] = DefVar(0, 1, LIN, "Part Temperature");
-	
-
-	// Unused index 10
-	
-	// Tuning -------------------------------------------------------------------------------------
-	// Albedo
-	int i = 11;
-	Params[i].var[0] = DefVar(0.2f, 5.0f, SQRT, "Red");
-	Params[i].var[1] = DefVar(0.2f, 5.0f, SQRT, "Green");
-	Params[i].var[2] = DefVar(0.2f, 5.0f, SQRT, "Blue");
-	Params[i].var[3] = DefVar(0.2f, 5.0f, SQRT, "Gamma", true);
-
-	Params[1 + i] = Params[i];	 // Emis
-	Params[1 + i].var[3] = DefVar(0.2f, 5.0f, SQRT, "Gamma", true);
-
-	Params[2 + i] = Params[i];	 // Refl
-	Params[2 + i].var[3] = DefVar(0.2f, 5.0f, SQRT, "Gamma", true);
-
-	Params[3 + i] = Params[i];  // Regn
-	Params[3 + i].var[3] = DefVar(0.2f, 5.0f, SQRT, "Gamma", true);
-
-	Params[4 + i] = Params[i];  // Transl
-	Params[4 + i].var[3] = DefVar(0.2f, 5.0f, SQRT, "???");
-
-	Params[5 + i] = Params[i];  // Transm
-	Params[5 + i].var[3] = DefVar(0.2f, 5.0f, SQRT, "???");
-
-	Params[6 + i] = Params[i];	 // Spec
-	Params[6 + i].var[3] = DefVar(0.1f, 9.9f, SQRT, "Power", false);
 }
 
-
-// =============================================================================================
-//
-void SetTuningValue(int idx, D3DCOLORVALUE *pClr, DWORD clr, float value)
-{
-	bool bExtend = (SendDlgItemMessageA(hDlg, IDC_DBG_EXTEND, BM_GETCHECK, 0, 0) == BST_CHECKED);
-
-	float mi = Params[idx].var[clr].min;
-	float mx = (bExtend ? Params[idx].var[clr].extmax : Params[idx].var[clr].max);
-
-	switch (clr) {
-		case 0: pClr->r = CLAMP(value, mi, mx); break;
-		case 1: pClr->g = CLAMP(value, mi, mx); break;
-		case 2: pClr->b = CLAMP(value, mi, mx); break;
-		case 3: 
-		{
-			if (Params[idx].var[clr].bGamma) pClr->a = 1.0f / CLAMP(value, mi, mx);		
-			else pClr->a = CLAMP(value, mi, mx);			
-		} break;
-	}
-}
-
-// =============================================================================================
-//
-float GetTuningValue(int idx, D3DCOLORVALUE *pClr, DWORD clr)
-{
-	switch (clr) {
-		case 0: return pClr->r;
-		case 1: return pClr->g;
-		case 2: return pClr->b;
-		case 3: 
-		{
-			if (Params[idx].var[clr].bGamma) return 1.0f / pClr->a;
-			else return pClr->a;
-		}
-	}
-	return 1.0f;
-}
 
 // =============================================================================================
 //
@@ -624,17 +804,19 @@ float _Clamp(float value, DWORD p, DWORD v)
 	return CLAMP(value, Params[p].var[v].min, (bExtend ? Params[p].var[v].extmax : Params[p].var[v].max));
 }
 
+
+
+
+
 // =============================================================================================
 //
 void UpdateShader()
 {
-	OBJHANDLE hObj = vObj->GetObjectA();
+	OBJHANDLE hObj = vObj->GetObjHandle();
 
 	if (!oapiIsVessel(hObj)) return;
 
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-
-	if (!hMesh) return;
+	if (!hSelMesh) return;
 
 	DWORD Shader = DWORD(SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_GETCURSEL, 0, 0));
 
@@ -643,39 +825,130 @@ void UpdateShader()
 	
 	switch (Shader) {
 	case 0:
-		hMesh->SetDefaultShader(SHADER_NULL);
-		pMgr->RegisterShaderChange(hMesh, SHADER_NULL);
+		hSelMesh->SetDefaultShader(SHADER_NULL);
+		pMgr->RegisterShaderChange(hSelMesh, SHADER_NULL);
 		break;
 	case 1:
-		hMesh->SetDefaultShader(SHADER_METALNESS);
-		pMgr->RegisterShaderChange(hMesh, SHADER_METALNESS);
+		hSelMesh->SetDefaultShader(SHADER_METALNESS);
+		pMgr->RegisterShaderChange(hSelMesh, SHADER_METALNESS);
+		break;
+	case 2:
+		hSelMesh->SetDefaultShader(SHADER_BAKED_VC);
+		pMgr->RegisterShaderChange(hSelMesh, SHADER_BAKED_VC);
 		break;
 	}
 
-	InitMatList(hMesh->GetDefaultShader());
+	InitMatList(hSelMesh->GetDefaultShader());
 }
+
+
+// =============================================================================================
+//
+void UpdateGroup(DWORD grp)
+{
+	if (!hSelMesh) return;
+	if (grp >= hSelMesh->GetGroupCount()) return;
+	auto g = hSelMesh->GetGroup(grp);
+
+	if (g) {
+		SendDlgItemMessage(hDlg, IDC_DBG_NOSHADOW, BM_SETCHECK, (g->UsrFlag & 0x1) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_NORENDER, BM_SETCHECK, (g->UsrFlag & 0x2) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_NOLIGHT, BM_SETCHECK, (g->UsrFlag & 0x4) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_ADDITIVE, BM_SETCHECK, (g->UsrFlag & 0x8) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_NOCOLOR, BM_SETCHECK, (g->UsrFlag & 0x10) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_OIT, BM_SETCHECK, (g->UsrFlag & 0x20) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_DYNAMIC, BM_SETCHECK, 0, 0);
+
+		char buf[64];
+		sprintf_s(buf, 64, "%d", g->MtrlIdx);
+		SetWindowText(GetDlgItem(hDlg, IDC_DBG_MATIDX), buf);
+		sprintf_s(buf, 64, "%d", g->TexIdx);
+		SetWindowText(GetDlgItem(hDlg, IDC_DBG_TEXIDX), buf);
+		string s = hDbgMsh->GetGroupLabel(grp);
+		SetWindowText(GetDlgItem(hDlg, IDC_DBG_GRPLABEL), s.c_str());
+	}
+}
+
+
+// =============================================================================================
+//
+void ValidateGroup(DWORD grp)
+{
+	if (!hSelMesh) return;
+	if (!hDbgMsh) return;
+
+	if (grp >= hSelMesh->GetGroupCount()) return;
+	auto g = hSelMesh->GetGroup(grp);
+	DWORD f = 0;
+
+	if (g)
+	{
+		if (SendDlgItemMessage(hDlg, IDC_DBG_NOSHADOW, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x1;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_NORENDER, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x2;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_NOLIGHT, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x4;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_ADDITIVE, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x8;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_NOCOLOR, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x10;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_OIT, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x20;
+		if (SendDlgItemMessage(hDlg, IDC_DBG_DYNAMIC, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= 0x0; // TODO: To be implemented
+
+		g->UsrFlag = f;
+		hDbgMsh->SetGroupFlags(grp, f);
+
+		char buf[64];
+		GetWindowText(GetDlgItem(hDlg, IDC_DBG_MATIDX), buf, 64);
+		g->MtrlIdx = atoi(buf);
+		if (g->MtrlIdx >= hSelMesh->GetMaterialCount()) g->MtrlIdx = hSelMesh->GetMaterialCount() - 1;
+		hDbgMsh->SetGroupMaterial(grp, g->MtrlIdx);
+
+		GetWindowText(GetDlgItem(hDlg, IDC_DBG_TEXIDX), buf, 64);
+		g->TexIdx = atoi(buf);
+		if (g->TexIdx >= hSelMesh->GetTextureCount()) g->TexIdx = hSelMesh->GetTextureCount() - 1;
+		hDbgMsh->SetGroupTexture(grp, g->TexIdx);
+		
+		GetWindowText(GetDlgItem(hDlg, IDC_DBG_GRPLABEL), buf, 64);
+		hDbgMsh->SetGroupLabel(grp, string(buf));
+	}
+}
+
+
+// =============================================================================================
+//
+void NextDoNotRender()
+{
+	if (!hSelMesh) return;
+	DWORD bak = sGroup;
+	sGroup++;
+	for (; sGroup < hSelMesh->GetGroupCount(); sGroup++) {
+		auto g = hSelMesh->GetGroup(sGroup);
+		if (g->UsrFlag & 0x2) {
+			SetupMeshGroups();
+			return;
+		}
+	}
+	for (sGroup = 0; sGroup < hSelMesh->GetGroupCount(); sGroup++) {
+		auto g = hSelMesh->GetGroup(sGroup);
+		if (g->UsrFlag & 0x2) {
+			SetupMeshGroups();
+			return;
+		}
+	}
+	sGroup = bak;
+}
+
 
 // =============================================================================================
 //
 void UpdateMeshMaterial(float value, DWORD MatPrp, DWORD clr)
 {
-	OBJHANDLE hObj = vObj->GetObjectA();
-
+	OBJHANDLE hObj = vObj->GetObjHandle();
 	if (!oapiIsVessel(hObj)) return;
-
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-
-	if (!hMesh) return;
+	if (!hSelMesh) return;
 	
-	DWORD matidx = hMesh->GetMeshGroupMaterialIdx(sGroup);
-	DWORD texidx = hMesh->GetMeshGroupTextureIdx(sGroup);
+	DWORD matidx = hSelMesh->GetMeshGroupMaterialIdx(sGroup);
+	DWORD texidx = hSelMesh->GetMeshGroupTextureIdx(sGroup);
 
 	D3D9MatExt Mat;
-	D3D9Tune Tune;
-
-	if (!hMesh->GetMaterial(&Mat, matidx)) return;
-
-	bool bTune = hMesh->GetTexTune(&Tune, texidx);
+	if (!hSelMesh->GetMaterial(&Mat, matidx)) return;
 
 	switch(MatPrp) {
 
@@ -748,55 +1021,11 @@ void UpdateMeshMaterial(float value, DWORD MatPrp, DWORD clr)
 			Mat.SpecialFX[clr] = _Clamp(value, MatPrp, clr);
 			break;
 		}
-
-		case 11:	// Tune Albedo
-		{
-			SetTuningValue(MatPrp, &Tune.Albedo, clr, value);
-			break;
-		}
-
-		case 12:	// Tune Emis
-		{
-			SetTuningValue(MatPrp, &Tune.Emis, clr, value);
-			break;
-		}
-
-		case 13:	// Tune Refl
-		{
-			SetTuningValue(MatPrp, &Tune.Refl, clr, value);
-			break;
-		}
-
-		case 14:	// Tune _Rghn
-		{
-			SetTuningValue(MatPrp, &Tune.Rghn, clr, value);
-			break;
-		}
-
-		case 15:	// Tune _Transl
-		{
-			SetTuningValue(MatPrp, &Tune.Transl, clr, value);
-			break;
-		}
-
-		case 16:	// Tune _Transm
-		{
-			SetTuningValue(MatPrp, &Tune.Transm, clr, value);
-			break;
-		}
-
-		case 17:	// Tune _Spec
-		{
-			SetTuningValue(MatPrp, &Tune.Spec, clr, value);
-			break;
-		}
 	}
 
-	if (bTune) hMesh->SetTexTune(&Tune, texidx);
-	hMesh->SetMaterial(&Mat, matidx);
+	hSelMesh->SetMaterial(&Mat, matidx);
 	vVessel *vVes = (vVessel *)vObj;
-
-	vVes->GetMaterialManager()->RegisterMaterialChange(hMesh, matidx, &Mat); 
+	vVes->GetMaterialManager()->RegisterMaterialChange(hSelMesh, matidx, &Mat);
 }
 
 
@@ -824,19 +1053,14 @@ DWORD GetModFlags(DWORD MatPrp)
 //
 bool IsMaterialModified(DWORD MatPrp)
 {
-	OBJHANDLE hObj = vObj->GetObjectA();
-
+	OBJHANDLE hObj = vObj->GetObjHandle();
 	if (!oapiIsVessel(hObj)) return false;
+	if (!hSelMesh) return false;
 
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-
-	if (!hMesh) return false;
-
-	DWORD matidx = hMesh->GetMeshGroupMaterialIdx(sGroup);
-	
+	DWORD matidx = hSelMesh->GetMeshGroupMaterialIdx(sGroup);
 	D3D9MatExt Mat;
 
-	if (!hMesh->GetMaterial(&Mat, matidx)) return false;
+	if (!hSelMesh->GetMaterial(&Mat, matidx)) return false;
 
 	return (Mat.ModFlags & GetModFlags(MatPrp)) != 0;
 }
@@ -846,24 +1070,20 @@ bool IsMaterialModified(DWORD MatPrp)
 //
 void SetMaterialModified(DWORD MatPrp, bool bState)
 {
-	OBJHANDLE hObj = vObj->GetObjectA();
+	OBJHANDLE hObj = vObj->GetObjHandle();
 
 	if (!oapiIsVessel(hObj)) return;
+	if (!hSelMesh) return;
 
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-
-	if (!hMesh) return;
-
-	DWORD matidx = hMesh->GetMeshGroupMaterialIdx(sGroup);
-
+	DWORD matidx = hSelMesh->GetMeshGroupMaterialIdx(sGroup);
 	D3D9MatExt Mat;
 
-	if (!hMesh->GetMaterial(&Mat, matidx)) return;
+	if (!hSelMesh->GetMaterial(&Mat, matidx)) return;
 
 	if (bState) Mat.ModFlags |= GetModFlags(MatPrp);
 	else		Mat.ModFlags &= (~GetModFlags(MatPrp));
 
-	hMesh->SetMaterial(&Mat, matidx);
+	hSelMesh->SetMaterial(&Mat, matidx);
 }
 
 
@@ -871,23 +1091,16 @@ void SetMaterialModified(DWORD MatPrp, bool bState)
 //
 float GetMaterialValue(DWORD MatPrp, DWORD clr)
 {
-	OBJHANDLE hObj = vObj->GetObjectA();
+	OBJHANDLE hObj = vObj->GetObjHandle();
 
 	if (!oapiIsVessel(hObj)) return 0.0f;
+	if (!hSelMesh) return 0.0f;
 
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
+	DWORD matidx = hSelMesh->GetMeshGroupMaterialIdx(sGroup);
+	DWORD texidx = hSelMesh->GetMeshGroupTextureIdx(sGroup);
 
-	if (!hMesh) return 0.0f;
-
-	DWORD matidx = hMesh->GetMeshGroupMaterialIdx(sGroup);
-	DWORD texidx = hMesh->GetMeshGroupTextureIdx(sGroup);
-
-	const D3D9MatExt *pMat = hMesh->GetMaterial(matidx);
-	
+	const D3D9MatExt *pMat = hSelMesh->GetMaterial(matidx);	
 	if (!pMat) return 0.0f;
-
-	D3D9Tune Tune;
-	bool bTune = hMesh->GetTexTune(&Tune, texidx);
 
 	switch(MatPrp) {
 
@@ -990,41 +1203,6 @@ float GetMaterialValue(DWORD MatPrp, DWORD clr)
 			}
 			break;
 		}
-
-		case 11:	// Tune Albedo
-		{
-			return GetTuningValue(MatPrp, &Tune.Albedo, clr);
-		}
-
-		case 12:	// Tune Emis
-		{
-			return GetTuningValue(MatPrp, &Tune.Emis, clr);
-		}
-
-		case 13:	// Tune Refl
-		{
-			return GetTuningValue(MatPrp, &Tune.Refl, clr);
-		}
-
-		case 14:	// Tune _Rghn
-		{
-			return GetTuningValue(MatPrp, &Tune.Rghn, clr);
-		}
-
-		case 15:	// Tune _Transl
-		{
-			return GetTuningValue(MatPrp, &Tune.Transl, clr);
-		}
-
-		case 16:	// Tune _Transm
-		{
-			return GetTuningValue(MatPrp, &Tune.Transm, clr);
-		}
-
-		case 17:	// Tune _Spec
-		{
-			return GetTuningValue(MatPrp, &Tune.Spec, clr);
-		}
 	}
 
 	return 0.0f;
@@ -1100,17 +1278,16 @@ void UpdateMaterialDisplay(bool bSetup)
 	char lbl[256];
 	char lbl2[64];
 
-	OBJHANDLE hObj = vObj->GetObjectA();
+	OBJHANDLE hObj = vObj->GetObjHandle();
 	if (!oapiIsVessel(hObj)) return;
-	
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-	if (!hMesh) return;
+	if (!hSelMesh) return;
 
-	WORD Shader = hMesh->GetDefaultShader();
+	WORD Shader = hSelMesh->GetDefaultShader();
 	if (Shader == SHADER_NULL) SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_SETCURSEL, 0, 0);
 	if (Shader == SHADER_METALNESS) SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_SETCURSEL, 1, 0);
+	if (Shader == SHADER_BAKED_VC) SendDlgItemMessageA(hDlg, IDC_DBG_DEFSHADER, CB_SETCURSEL, 2, 0);
 
-	DWORD matidx = hMesh->GetMeshGroupMaterialIdx(sGroup);
+	DWORD matidx = hSelMesh->GetMeshGroupMaterialIdx(sGroup);
 
 	// Set material info
 	const char *skin = NULL;
@@ -1131,22 +1308,33 @@ void UpdateMaterialDisplay(bool bSetup)
 	SetToolTip(IDC_DBG_BLUE, hTipBlu, Params[MatPrp].var[2].tip);
 	SetToolTip(IDC_DBG_ALPHA, hTipAlp, Params[MatPrp].var[3].tip);
 
-	DWORD texidx = hMesh->GetMeshGroupTextureIdx(sGroup);
+	DWORD texidx = hSelMesh->GetMeshGroupTextureIdx(sGroup);
 
 	if (texidx==0) SetWindowText(GetDlgItem(hDlg, IDC_DBG_TEXTURE), "Texture: None");
 	else {
-		SURFHANDLE hSrf = hMesh->GetTexture(texidx);
+		SURFHANDLE hSrf = hSelMesh->GetTexture(texidx);
 		if (hSrf) {
 			sprintf_s(lbl, 256, "Texture: %s [%u]", RemovePath(SURFACE(hSrf)->GetName()), texidx);
 			SetWindowText(GetDlgItem(hDlg, IDC_DBG_TEXTURE), lbl);
 		}
 	}
 
-	sprintf_s(lbl, 256, "Mesh: %s", RemovePath(hMesh->GetName()));
+	sprintf_s(lbl, 256, "Mesh: %s", RemovePath(hSelMesh->GetName()));
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_MESHNAME), lbl);
-	
-	GetWindowText(GetDlgItem(hDlg, IDC_DBG_MESHGRP), lbl2, 64);
-	if (strcmp(lbl, lbl2)) SetWindowText(GetDlgItem(hDlg, IDC_DBG_MESHGRP), lbl); // Avoid causing flashing
+
+	string str = "";
+	DWORD vis = vObj->GetMeshVisMode(sMesh);
+
+	if (vis == 0) str = "NEVER";
+	if (vis == MESHVIS_ALWAYS) str = "ALWAYS";
+
+	if (vis & MESHVIS_COCKPIT) str.append("COCKPIT ");
+	if (vis & MESHVIS_VC) str.append("VC ");
+	if (vis & MESHVIS_EXTERNAL) str.append("EXTERNAL ");
+	if (vis & MESHVIS_EXTPASS) str.append("EXTPASS ");
+
+	sprintf_s(lbl, 256, "MeshVisMode: %s", str.c_str());
+	SetWindowText(GetDlgItem(hDlg, IDC_DBG_VISMODE), lbl);
 }
 
 // =============================================================================================
@@ -1154,8 +1342,7 @@ void UpdateMaterialDisplay(bool bSetup)
 bool IsSelectedGroupRendered()
 {
 	if (!vObj) return false;
-	D3D9Mesh *hMesh = (D3D9Mesh *)vObj->GetMesh(sMesh);
-	if (hMesh) return hMesh->IsGroupRendered(sGroup);
+	if (hSelMesh) return hSelMesh->IsGroupRendered(sGroup);
 	return false;
 }
 
@@ -1224,15 +1411,46 @@ void SelectGroup(DWORD idx)
 
 // =============================================================================================
 //
+void ValidateMesh(D3D9Mesh* pMesh)
+{
+	if (pMesh != hSelMesh)
+	{	
+		if (dbgMsh.find(pMesh) == dbgMsh.end()) {
+			char MeshFile[MAX_PATH];
+			sprintf_s(MeshFile, MAX_PATH, "%s%s.msh", OapiExtension::GetMeshDir(), pMesh->GetName());
+			dbgMsh[pMesh] = new DbgMesh(MeshFile);
+		}
+		hSelMesh = pMesh;
+		hDbgMsh = dbgMsh[pMesh];
+	}
+}
+
+// =============================================================================================
+//
 void SelectMesh(D3D9Mesh *pMesh)
 {
-	for (DWORD i=0;i<nMesh;i++) {
-		if (vObj->GetMesh(i)==pMesh) {
+	sMesh = 0;
+	for (DWORD i = 0; i < nMesh; i++) {
+		if (vObj->GetMesh(i) == pMesh) {
 			sMesh = i;
-			break;
+			ValidateMesh(pMesh);
+			SetupMeshGroups();
+			return;
 		}
 	}
-	SetupMeshGroups();
+}
+
+// =============================================================================================
+//
+void UpdateMeshFlags()
+{
+	if (!hSelMesh) return;
+	DWORD f = 0;
+
+	if (SendDlgItemMessage(hDlg, IDC_DBG_ISVCMESH, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= MESHFLAG_VC;
+	if (SendDlgItemMessage(hDlg, IDC_DBG_VCSHADOW, BM_GETCHECK, 0, 0) == BST_CHECKED) f |= MESHFLAG_SHADOW_VC;
+	hSelMesh->MeshFlags = f | 0x1;
+	hDbgMsh->SetMeshFlags(hSelMesh->MeshFlags);
 }
 
 // =============================================================================================
@@ -1259,14 +1477,15 @@ void SetupMeshGroups()
 	sprintf_s(lbl,256,"%u/%u",sMesh,nMesh-1);
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_MESH), lbl);
 
-	D3D9Mesh *mesh = (class D3D9Mesh *)vObj->GetMesh(sMesh);
+	ValidateMesh(vObj->GetMesh(sMesh));
 
-	if (mesh) nGroup = mesh->GetGroupCount();
-	else	  nGroup = 0;
+	if (hSelMesh) nGroup = hSelMesh->GetGroupCount();
+	else nGroup = 0;
 
 	if (nGroup!=0) {
 		if (sGroup>0xFFFF)  sGroup = nGroup-1;
 		if (sGroup>=nGroup) sGroup = 0;
+		UpdateGroup(sGroup);
 	}
 	else {
 		sGroup=0;
@@ -1277,9 +1496,67 @@ void SetupMeshGroups()
 	sprintf_s(lbl,256,"%u/%u",sGroup,nGroup-1);
 	SetWindowText(GetDlgItem(hDlg, IDC_DBG_GROUP), lbl);
 
+	if (hSelMesh) {
+		SendDlgItemMessage(hDlg, IDC_DBG_ISVCMESH, BM_SETCHECK, (hSelMesh->MeshFlags & MESHFLAG_VC) != 0, 0);
+		SendDlgItemMessage(hDlg, IDC_DBG_VCSHADOW, BM_SETCHECK, (hSelMesh->MeshFlags & MESHFLAG_SHADOW_VC) != 0, 0);
+	}
+
 	UpdateMaterialDisplay();
 	SetColorSlider();
-	InitMatList(mesh->GetDefaultShader());
+	UpdateLightsSlider();
+	InitMatList(hSelMesh->GetDefaultShader());
+}
+
+
+// =============================================================================================
+//
+void UpdateBakedLights(float lvl)
+{
+	vVessel* vV = (vVessel*)vObj;
+	if (vObj->Type() == OBJTP_VESSEL)
+	{	
+		if (bkl_id < 16 && bkl_id >= 0) 
+			vV->SetVisualProperty(VisualProp::BAKED_LIGHT, bkl_id, typeid(FVECTOR3), &FVECTOR3(lvl, lvl, lvl));
+		if (bkl_id == 16) vV->SetVisualProperty(VisualProp::AMBIENT, 0, typeid(FVECTOR3), &FVECTOR3(lvl, lvl, lvl));
+		if (bkl_id == 17) vV->SetVisualProperty(VisualProp::DA_CURVE, 0, typeid(float), &lvl);
+		if (bkl_id == 18) vV->SetVisualProperty(VisualProp::DA_BOUNCH, 0, typeid(float), &lvl);
+		if (bkl_id == 19) vV->SetVisualProperty(VisualProp::DA_FORCE, 0, typeid(float), &lvl);
+
+		char lbl[128]; sprintf_s(lbl, 128, "Light Controls  (%1.3f)", lvl);
+		SetWindowText(GetDlgItem(hDlg, IDC_DBG_BKLGROUP), lbl);
+	}
+}
+
+// =============================================================================================
+//
+void UpdateLightsSlider()
+{
+	FVECTOR3 val = 0.0f;
+	float fVal = 0.0f;
+	vVessel* vV = (vVessel*)vObj;
+	if (vObj->Type() == OBJTP_VESSEL)
+	{
+		if (bkl_id < 16 && bkl_id >= 0) vV->GetVisualProperty(VisualProp::BAKED_LIGHT, bkl_id, typeid(val), &val);
+		if (bkl_id == 16) vV->GetVisualProperty(VisualProp::AMBIENT, 0, typeid(val), &val);
+		fVal = val.x;
+		if (bkl_id == 17) vV->GetVisualProperty(VisualProp::DA_CURVE, 0, typeid(float), &fVal);
+		if (bkl_id == 18) vV->GetVisualProperty(VisualProp::DA_BOUNCH, 0, typeid(float), &fVal);
+		if (bkl_id == 19) vV->GetVisualProperty(VisualProp::DA_FORCE, 0, typeid(float), &fVal);
+		SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_SETPOS, 1, WORD(255.0f * fVal));
+		char lbl[128]; sprintf_s(lbl, 128, "Light Controls  (%1.3f)", fVal);
+		SetWindowText(GetDlgItem(hDlg, IDC_DBG_BKLGROUP), lbl);
+	}
+}
+
+// =============================================================================================
+//
+LPDIRECT3DTEXTURE9 GetCombinedMap()
+{
+	if (hSelMesh) {
+		DWORD texidx = hSelMesh->GetMeshGroupTextureIdx(sGroup);
+		return hSelMesh->GetCombinedMap(texidx);
+	}
+	return NULL;
 }
 
 // =============================================================================================
@@ -1287,7 +1564,7 @@ void SetupMeshGroups()
 double GetVisualSize()
 {
 	if (hDlg && vObj) {
-		OBJHANDLE hObj = vObj->GetObjectA();
+		OBJHANDLE hObj = vObj->GetObjHandle();
 		if (hObj) return oapiGetSize(hObj);
 	}
 	return 1.0;
@@ -1298,6 +1575,13 @@ double GetVisualSize()
 vObject * GetVisual()
 {
 	return vObj;
+}
+
+// =============================================================================================
+//
+D3D9Mesh* GetMesh()
+{
+	return hSelMesh;
 }
 
 // =============================================================================================
@@ -1329,7 +1613,7 @@ void UpdateVisual()
 		SendDlgItemMessageA(hDlg, IDC_DBG_CONES, CB_ADDSTRING, 0, (LPARAM)"NONE");
 		Emitters[0] = NULL;
 
-		char line[64];
+		char line[64]; strcpy(line, "");
 
 		vVessel *vV = static_cast<vVessel*>(vObj);
 		VESSEL *vessel = vV->GetInterface();
@@ -1600,9 +1884,11 @@ void SaveEnvMap()
 
 	if (oapiIsVessel(hObj)) {
 		vVessel *vVes = (vVessel *)vObj;
-		LPDIRECT3DCUBETEXTURE9 pTex = vVes->GetEnvMap(ENVMAP_MAIN);
-		if (D3DXSaveTextureToFileA("EnvMap.dds", D3DXIFF_DDS, pTex, NULL) != S_OK) {
-			LogErr("Failed to save envmap");
+		auto pTex = vVes->GetExteriorEnvMap() ? vVes->GetExteriorEnvMap()->pCube : nullptr;
+		if (pTex->GetType() == D3DRTYPE_CUBETEXTURE) {
+			if (D3DXSaveTextureToFileA("EnvMap.dds", D3DXIFF_DDS, (LPDIRECT3DCUBETEXTURE9)pTex, NULL) != S_OK) {
+				LogErr("Failed to save envmap");
+			}
 		}
 	}
 }
@@ -1805,6 +2091,12 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				UpdateColorSlider(pos);
 				UpdateMaterialDisplay();
 			}
+
+			if (HWND(lParam) == GetDlgItem(hWnd, IDC_DBG_BKLADJ)) {
+				if (pos == 0) pos = WORD(SendDlgItemMessage(hDlg, IDC_DBG_BKLADJ, TBM_GETPOS, 0, 0));
+				float val = float(pos) / 255.0f;
+				UpdateBakedLights(val);
+			}
 		}
 		return false;
 	}
@@ -1823,9 +2115,15 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				break;
 			}
 
+			case IDC_DBG_NEXT:
+			{
+				NextDoNotRender();
+				break;
+			}
+
 			case IDC_DBG_MATSAVE:
 			{
-				OBJHANDLE hObj = vObj->GetObjectA();
+				OBJHANDLE hObj = vObj->GetObjHandle();
 				if (oapiIsVessel(hObj)) {
 					vVessel *vVes = (vVessel *)vObj;
 					vVes->GetMaterialManager()->SaveConfiguration();
@@ -1932,6 +2230,31 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				}
 				break;
 
+			case IDC_DBG_BKLID:
+				if (HIWORD(wParam) == CBN_SELCHANGE) {
+					bkl_id = int(SendDlgItemMessage(hDlg, IDC_DBG_BKLID, CB_GETCURSEL, 0, 0));
+					UpdateLightsSlider();
+				}
+				break;
+
+			case IDC_DBG_DATASRC:
+				if (HIWORD(wParam) == CBN_SELCHANGE) {
+					probe_id = int(SendDlgItemMessage(hDlg, IDC_DBG_DATASRC, CB_GETCURSEL, 0, 0)) - 1;					
+				}
+				break;
+
+			case IDC_DBG_AMBDIR:
+				if (HIWORD(wParam) == CBN_SELCHANGE) {
+					ambdir = int(SendDlgItemMessage(hDlg, IDC_DBG_AMBDIR, CB_GETCURSEL, 0, 0)) - 1;
+				}
+				break;
+
+			case IDC_DBG_ENVMAP:
+				if (HIWORD(wParam) == CBN_SELCHANGE) {
+					dbgdsp = DbgDisplay(SendDlgItemMessage(hDlg, IDC_DBG_ENVMAP, CB_GETCURSEL, 0, 0));
+				}
+				break;
+
 			case IDC_DBG_DISPLAY:
 				if (HIWORD(wParam)==CBN_SELCHANGE) dspMode = DWORD(SendDlgItemMessage(hWnd, IDC_DBG_DISPLAY, CB_GETCURSEL, 0, 0));
 				break;
@@ -1997,6 +2320,20 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				oapiSetPause(bPaused);
 				break;
 
+			case IDC_DBG_MESHSAVE:
+				if (dbgMsh[hSelMesh]) {
+					bPaused = oapiGetPause();
+					oapiSetPause(true);
+					strcpy(SaveMesh.lpstrFileTitle, hSelMesh->GetName());
+					SaveMesh.hwndOwner = hWnd;
+					if (GetSaveFileName(&SaveMesh)) {
+						dbgMsh[hSelMesh]->Save(SaveMesh.lpstrFile);
+						return true;
+					}
+					oapiSetPause(bPaused);
+				}
+				break;
+
 			case IDC_DBG_ACTION:
 				break;
 
@@ -2027,6 +2364,11 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				SetColorSlider();
 				break;
 
+			case IDC_DBG_ISVCMESH:
+			case IDC_DBG_VCSHADOW:
+				UpdateMeshFlags();
+				break;
+
 			case IDC_DBG_GRPO:
 			case IDC_DBG_VISO:
 			case IDC_DBG_MSHO:
@@ -2040,7 +2382,34 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			case IDC_DBG_PICK:
 			case IDC_DBG_FPSLIM:
 			case IDC_DBG_TILEBB:
+			case IDC_DBG_CLIPDIST:
+			case IDC_DBG_EXTVC:
+			case IDC_DBG_PICKCURRENT:
+			case IDC_DBG_NOSUNAMB:
+			case IDC_DBG_NOPLNAMB:
+			case IDC_DBG_NODYNSUN:
+			case IDC_DBG_VCZONES:
 				UpdateFlags();
+				break;
+
+			case IDC_DBG_NOSHADOW:
+			case IDC_DBG_NORENDER:
+			case IDC_DBG_NOLIGHT:
+			case IDC_DBG_ADDITIVE:
+			case IDC_DBG_NOCOLOR:
+			case IDC_DBG_OIT:
+			case IDC_DBG_DYNAMIC:
+				if (HIWORD(wParam) == BN_CLICKED) {
+					ValidateGroup(sGroup);
+				}
+				break;
+
+			case IDC_DBG_MATIDX:
+			case IDC_DBG_TEXIDX:					
+			case IDC_DBG_GRPLABEL:
+				if (HIWORD(wParam) == EN_KILLFOCUS) {
+					ValidateGroup(sGroup);
+				}
 				break;
 
 			case IDC_DBG_VARA:
@@ -2050,7 +2419,7 @@ INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				break;
 		
 			default: 
-				LogErr("LOWORD(%hu), HIWORD(0x%hX)",LOWORD(wParam),HIWORD(wParam));
+				//LogErr("LOWORD(%hu), HIWORD(0x%hX)",LOWORD(wParam),HIWORD(wParam));
 				break;
 		}
 		break;
@@ -2326,7 +2695,7 @@ INT_PTR CALLBACK WndProcGFX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		default:
-			LogErr("WndProcGFX() LOWORD(%hu), HIWORD(0x%hX)", LOWORD(wParam), HIWORD(wParam));
+			//LogErr("WndProcGFX() LOWORD(%hu), HIWORD(0x%hX)", LOWORD(wParam), HIWORD(wParam));
 			break;
 		}
 		break;

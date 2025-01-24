@@ -9,6 +9,8 @@
 #ifndef __VVESSEL_H
 #define __VVESSEL_H
 
+#define MAX_INTCAM 6
+
 #include "VObject.h"
 #include "Mesh.h"
 #include "gcCore.h"
@@ -44,6 +46,19 @@ typedef struct {
 class vVessel: public vObject {
 public:
 	friend class D3D9Client;
+
+	enum Errors { NoVC, ITEMS }; // ITEMS must be last entry
+
+	enum class SMI { VC, Visual, Mesh };
+
+	struct Render {
+		static const int VC		= 0x1;	// Camera in VC view
+		static const int D2		= 0x2;	// Camera in 2D panel view
+		static const int IP		= 0x4;	// Internal pass
+	};
+
+	vVessel* vRoot = nullptr;
+
 	/**
 	 * \brief Creates a new vessel visual for a scene
 	 * \param _hObj vessel object handle
@@ -66,15 +81,24 @@ public:
 
 	void clbkEvent(DWORD evnt, DWORD_PTR context);
 
-	MESHHANDLE GetMesh (UINT idx);
+	D3D9Mesh* GetMesh (UINT idx);
+	DWORD GetMeshVisMode(UINT idx); 
 	bool GetMinMaxDistance(float *zmin, float *zmax, float *dmin);
-	void GetMinMaxLightDist(float *mind, float *maxd);
 	int	 GetMatrixTransform(gcCore::MatrixId matrix_id, DWORD mesh, DWORD group, FMATRIX4 *pMat);
 	int  SetMatrixTransform(gcCore::MatrixId matrix_id, DWORD mesh, DWORD group, const FMATRIX4 *pMat);
+	bool GetVCPos(D3DXVECTOR3* cpos, D3DXVECTOR3* lpos, float* rad);
+	bool GetMeshPosition(int idx, D3DXVECTOR3* cpos, D3DXVECTOR3* lpos, float* rad);
+	void BakeLights(ImageProcessing* pBaker);
+	void ErrorOnce(Errors e);
 	void UpdateBoundingBox();
-	bool IsInsideShadows();
-	bool IntersectShadowVolume();
-	bool IntersectShadowTarget();
+
+	// Shadow Map Methods
+	bool IsInsideShadows(const SMapInput* shd);
+	bool IntersectShadowVolume(const SMapInput* shd);
+	bool IntersectShadowTarget(const SMapInput* shd);
+	void GetMinMaxLightDist(const SMapInput* shd, float* mind, float* maxd);
+	bool GetSMapRenderData(SMI type, int idx, SMapInput* sm);
+
 	void ReloadTextures();
 	
 	inline DWORD GetMeshCount();
@@ -113,7 +137,8 @@ public:
 	 *   in cockpit camera mode.
 	 * \sa Render(LPDIRECT3DDEVICE9)
 	 */
-	bool Render (LPDIRECT3DDEVICE9 dev, bool bInternalPass);
+	bool Render (LPDIRECT3DDEVICE9 dev, const SHADOWMAP *sm, DWORD flags);
+	bool Render(LPDIRECT3DDEVICE9 dev, bool internalpass, const SHADOWMAP* shd);
 
 	bool RenderExhaust();
 
@@ -127,16 +152,24 @@ public:
 	void RenderGrapplePoints (LPDIRECT3DDEVICE9 dev);
 	void RenderGroundShadow (LPDIRECT3DDEVICE9 dev, OBJHANDLE hPlanet, float depth);
 	void RenderVectors (LPDIRECT3DDEVICE9 dev, D3D9Pad *pSkp);
-	bool RenderENVMap (LPDIRECT3DDEVICE9 pDev, DWORD cnt=2, DWORD flags=0xFF);
-	bool ProbeIrradiance(LPDIRECT3DDEVICE9 pDev, DWORD cnt = 2, DWORD flags = 0xFF);
+	void RenderClickZones();
+	bool RenderENVMap (LPDIRECT3DDEVICE9 pDev, ENVCAMREC* ec, DWORD cnt = 2, DWORD flags = 0xFF);
+	bool RenderInteriorENVMap(LPDIRECT3DDEVICE9 pDev, ENVCAMREC* ec, SHADOWMAP* sm);
+	bool ProcessEnvMaps(LPDIRECT3DDEVICE9 pDev, DWORD cnt, DWORD flags);
 
-	LPDIRECT3DCUBETEXTURE9 GetEnvMap(int idx);
-	LPDIRECT3DCUBETEXTURE9 GetIrradEnv() { return pIrdEnv; }
-	LPDIRECT3DTEXTURE9 GetIrradianceMap() { return pIrrad; }
+	ENVCAMREC*	GetExteriorEnvMap();
+	ENVCAMREC*	CreateEnvCam(EnvCamType ec, int idx = -1);
+	ENVCAMREC*	GetEnvCam(EnvCamType ec, int idx = -1);
+	bool		GetInteriorCams(std::list<ENVCAMREC*>* pCams);
+	bool		HasOwnEnvCam(EnvCamType ec);
 
+
+	bool IsRoot() const;
+	vVessel* GetRoot() const { return vRoot; }
+	
 	float GetExhaustLength() const { return ExhaustLength; }
 
-	D3D9Pick Pick(const D3DXVECTOR3 *vDir);
+	D3D9Pick Pick(const D3DXVECTOR3 *vDir, const PickProp* p);
 
 	bool HasExtPass();
 	bool HasShadow();
@@ -152,6 +185,10 @@ public:
 	* \note If mshidx == (UINT)-1 (default), all meshes are updated.
 	*/
 	void UpdateAnimations(int mshidx = -1);
+
+	void SetVisualProperty(VisualProp prp, int idx, const type_info& t, const void* val);
+	bool GetVisualProperty(VisualProp prp, int idx, const type_info& t, void* val);
+	
 
 protected:
 
@@ -198,17 +235,16 @@ private:
 	std::map<MGROUP_TRANSFORM *, _defstate> defstate;
 	std::unordered_set<UINT> applyanim;
 	std::map<int, double> currentstate;
+	ENVCAMREC* InteriorCams[MAX_INTCAM] = { nullptr };
 
+	// Default eCam configurations
+	ENVCAMREC ecDefExt;
+	FVECTOR3 BakedLightsControl[16];
+	FVECTOR3 VCAmbient;
+	bool bMustRebake;
 
 	VESSEL *vessel;			// access instance for the vessel
 	class MatMgr *pMatMgr;
-
-	LPDIRECT3DCUBETEXTURE9 pEnv[4], pIrdEnv;
-	LPDIRECT3DTEXTURE9 pIrrad;
-
-	int nEnv;				// Number of environmental maps
-	int iFace;				// EnvMap Face index that is to be rendered next
-	int eFace;
 
 	struct MESHREC {
 		D3D9Mesh *mesh;		// DX9 mesh representation
@@ -223,6 +259,7 @@ private:
 	float ExhaustLength;
 
 	static class SurfNative *defreentrytex, *defexhausttex;
+	static class ShaderClass* pRenderZone;
 };
 
 #endif // !__VVESSEL_H

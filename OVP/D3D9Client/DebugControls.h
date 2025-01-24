@@ -61,15 +61,31 @@
 #define DBG_FLAGS_PICK					0x1000	///< Enable mesh picking with mouse
 #define DBG_FLAGS_FPSLIM				0x2000	///< FPS Limiter enabled
 #define DBG_FLAGS_TILEBOXES				0x4000	///< Tile Boxes
+#define DBG_FLAGS_NEARCLIP				0x8000	///< Set Clip distance to 2cm
+#define DBG_FLAGS_RENDEREXT			    0x10000	///< Render exterior meshes for VC view
+#define DBG_FLAGS_PICKCURRENT			0x20000 ///< Only use Pick for current mesh
+#define DBG_FLAGS_NOSUNAMB				0x40000 ///< Disable sun ambient effect in VC
+#define DBG_FLAGS_NOPLNAMB				0x80000 ///< Disable planet shine ambient effect in VC
+#define DBG_FLAGS_NODYNSUN				0x100000 ///< Disable dynamic sunlight
+#define DBG_FLAGS_VCZONES				0x200000 ///< Display VC Click Zones 
 /// @}
 
 
 class vObject;
 
+enum class DbgDisplay {
+	None, Mirror, Blur1, Blur2, Blur3, Blur4,
+	smSS, smVC, smEX, Irradiance, GlowMask,
+	ScreenDepth, Normals, LightVisbil, BakedLightMap, Eclipse
+};
+
 // ==============================================================
 
 namespace DebugControls {
 
+	extern  DbgDisplay dbgdsp;
+	extern  int ambdir;
+	extern  int probe_id;
 	extern  DWORD sMesh;
 	extern  DWORD sGroup;
 	extern  DWORD debugFlags;
@@ -107,6 +123,7 @@ namespace DebugControls {
 	void		RemoveVisual(vObject *vo);
 	vObject *	GetVisual();
 	void		SetPickPos(D3DXVECTOR3 pos);
+	D3D9Mesh*	GetMesh();
 
 	void		SetupMeshGroups();
 	void		UpdateVisual();
@@ -117,13 +134,17 @@ namespace DebugControls {
 	void		SelectMesh(D3D9Mesh *pMesh);
 	void		SetGroupHighlight(bool bStat);
 	int			GetSceneDebug();
-	int			GetSelectedEnvMap();
+	DbgDisplay	GetSelectedEnvMap();
 	
 	bool		IsActive();
 	bool		IsSelectedGroupRendered();
 
 	void		Append(const char *format, ...);
 	void		Refresh();
+
+	inline int  GetProbeId() { return probe_id; }
+
+	LPDIRECT3DTEXTURE9 GetCombinedMap();
 
 	INT_PTR CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 	INT_PTR CALLBACK ViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);

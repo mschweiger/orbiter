@@ -158,6 +158,8 @@ DeltaGlider::DeltaGlider (OBJHANDLE hObj, int fmodel)
 {
 	int i;
 
+	oapiWriteLogVerbose("[DG] Constructor");
+
 	modelidx = (fmodel ? 1 : 0);
 
 	// Subsystem definitions
@@ -213,6 +215,7 @@ DeltaGlider::DeltaGlider (OBJHANDLE hObj, int fmodel)
 // --------------------------------------------------------------
 DeltaGlider::~DeltaGlider ()
 {
+	oapiWriteLogVerbose("[DG] Destructor");
 	DWORD i;
 
 	if (insignia_tex) oapiDestroySurface(insignia_tex);
@@ -875,6 +878,7 @@ void DeltaGlider::InitVCMesh()
 void DeltaGlider::clbkSetClassCaps (FILEHANDLE cfg)
 {
 	// *************** physical parameters **********************
+	oapiWriteLogVerbose("[DG] clbkSetClassCaps");
 
 	bool b;
 	int i;
@@ -1110,6 +1114,7 @@ void DeltaGlider::clbkSetClassCaps (FILEHANDLE cfg)
 // --------------------------------------------------------------
 void DeltaGlider::clbkLoadStateEx (FILEHANDLE scn, void *vs)
 {
+	oapiWriteLogVerbose("[DG] clbkLoadStateEx");
     char *line;
 
 	while (oapiReadScenario_nextline (scn, line)) {
@@ -1150,6 +1155,7 @@ void DeltaGlider::clbkLoadStateEx (FILEHANDLE scn, void *vs)
 // --------------------------------------------------------------
 void DeltaGlider::clbkSaveState (FILEHANDLE scn)
 {
+	oapiWriteLogVerbose("[DG] clbkSaveState");
 	char cbuf[256];
 	int i;
 
@@ -1186,6 +1192,7 @@ void DeltaGlider::clbkSaveState (FILEHANDLE scn)
 // --------------------------------------------------------------
 void DeltaGlider::clbkPostCreation ()
 {
+	oapiWriteLogVerbose("[DG] clbkPostCreation");
 	ComponentVessel::clbkPostCreation ();
 
 	SetEmptyMass ();
@@ -1218,6 +1225,7 @@ void DeltaGlider::clbkPostCreation ()
 // --------------------------------------------------------------
 void DeltaGlider::clbkVisualCreated (VISHANDLE vis, int refcount)
 {
+	oapiWriteLogVerbose("[DG] clbkVisualCreated");
 	visual = vis;
 	exmesh = GetDevMesh (vis, 0);
 	vcmesh = GetDevMesh (vis, 1);
@@ -1255,6 +1263,7 @@ void DeltaGlider::clbkVisualCreated (VISHANDLE vis, int refcount)
 // --------------------------------------------------------------
 void DeltaGlider::clbkVisualDestroyed (VISHANDLE vis, int refcount)
 {
+	oapiWriteLogVerbose("[DG] clbkVisualDestroyed");
 	visual = NULL;
 	exmesh = NULL;
 	vcmesh = NULL;
@@ -1352,6 +1361,7 @@ bool DeltaGlider::clbkLoadGenericCockpit ()
 
 bool DeltaGlider::clbkLoadPanel2D (int id, PANELHANDLE hPanel, DWORD viewW, DWORD viewH)
 {
+	oapiWriteLogVerbose("[DG] clbkLoadPanel2D");
 	// set up subsystem panel elements
 	ComponentVessel::clbkLoadPanel2D (id, hPanel, viewW, viewH);
 
@@ -1444,6 +1454,8 @@ bool DeltaGlider::clbkPanelRedrawEvent (int id, int event, SURFHANDLE surf, void
 // --------------------------------------------------------------
 bool DeltaGlider::clbkLoadVC (int id)
 {
+	oapiWriteLogVerbose("[DG] clbkLoadVC");
+
 	static VCMFDSPEC mfds_left  = {1, GRP_LMFD_DISPLAY_VC};
 	static VCMFDSPEC mfds_right = {1, GRP_RMFD_DISPLAY_VC};
 	static VCHUDSPEC huds = {1, GRP_HUDDISP_VC, {0,1.462,7.09}, 0.15};
