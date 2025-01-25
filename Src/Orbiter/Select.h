@@ -5,7 +5,6 @@
 #define __SELECT_H
 
 #include "OrbiterAPI.h"
-#include "GraphicsAPI.h"
 #include <list>
 
 #define ITEM_SUBMENU 0x01

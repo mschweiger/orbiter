@@ -120,7 +120,6 @@ class VESSEL;
 class CELBODY;
 class ExternMFD;
 class Interpreter;
-class ImGuiDialog;
 
 namespace oapi {
 	class Module;
@@ -648,6 +647,23 @@ typedef struct {
 	double amin, amax; ///<     min and max densities for atms PLIN mapping
 	SURFHANDLE tex;    ///<     particle texture handle (NULL for default)
 } PARTICLESTREAMSPEC;
+
+
+class OAPIFUNC ImGuiDialog {
+public:
+	virtual ~ImGuiDialog() = default;
+	bool IsActive() { return active; }
+	void Activate() { active = true; }
+	void Display() {
+		Draw();
+		if (!active) OnClose();
+	}
+	virtual void OnClose() {};
+private:
+	virtual void Draw() = 0;
+protected:
+	bool active = false;
+};
 
 
 /**

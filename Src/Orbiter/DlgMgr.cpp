@@ -3,7 +3,6 @@
 
 #define EXPORT_IMGUI_CONTEXT
 #include <stdio.h>
-#include "GraphicsAPI.h"
 #include "DlgMgr.h"
 #include "Resource.h"
 #include "Orbiter.h"
