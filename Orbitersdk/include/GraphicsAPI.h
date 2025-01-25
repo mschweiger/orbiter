@@ -2061,9 +2061,9 @@ OAPIFUNC bool oapiRegisterGraphicsClient (oapi::GraphicsClient *gc);
 
 OAPIFUNC bool oapiUnregisterGraphicsClient (oapi::GraphicsClient *gc);
 
-class OAPIFUNC DialogImGui {
+class OAPIFUNC ImGuiDialog {
 public:
-	virtual ~DialogImGui() = default;
+	virtual ~ImGuiDialog() = default;
 	bool IsActive() { return active; }
 	void Activate() { active = true; }
 	void Display() {

@@ -450,7 +450,7 @@ void DialogManager::InitImGui()
 	icons_config.PixelSnapH = true;
 	icons_config.FontDataOwnedByAtlas = false;
 
-	io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 18.0f, &config, GetGlyphRangesOrbiter());
+	io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 14.0f, &config, GetGlyphRangesOrbiter());
 	io.Fonts->Build();
 
 	ImGui_ImplWin32_Init(hWnd);

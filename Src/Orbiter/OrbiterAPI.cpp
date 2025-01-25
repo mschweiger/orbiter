@@ -2159,7 +2159,7 @@ DLLEXPORT HWND oapiOpenDialogEx (HINSTANCE hDLLInst, int resourceId, DLGPROC msg
 	return g_pOrbiter->OpenDialogEx (hDLLInst, resourceId, msgProc, flag, context);
 }
 
-DLLEXPORT void oapiOpenDialog(DialogImGui *e)
+DLLEXPORT void oapiOpenDialog(ImGuiDialog *e)
 {
 	g_pOrbiter->DlgMgr()->AddEntry(e);
 	e->Activate();
@@ -2175,7 +2175,7 @@ DLLEXPORT void oapiCloseDialog (HWND hDlg)
 	g_pOrbiter->CloseDialog (hDlg);
 }
 
-DLLEXPORT void oapiCloseDialog(DialogImGui *e)
+DLLEXPORT void oapiCloseDialog(ImGuiDialog *e)
 {
 	g_pOrbiter->DlgMgr()->DelEntry(e);
 }

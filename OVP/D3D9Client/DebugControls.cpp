@@ -61,7 +61,7 @@ void UpdateMaterialDisplay(bool bSetup=false);
 
 void OpenGFXDlgClbk(void *context);
 
-class GFXDialog: public DialogImGui
+class GFXDialog: public ImGuiDialog
 {
 	// Resettable slider from https://github.com/ocornut/imgui/issues/1751
 	static bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format = "%.3f")
@@ -313,6 +313,7 @@ void Release()
 {
 	vObj = NULL;
 	hDlg = NULL;
+	oapiCloseDialog(gfxDlg);
 	delete gfxDlg;
 	gfxDlg = NULL;
 	if (dwCmd) oapiUnregisterCustomCmd(dwCmd);

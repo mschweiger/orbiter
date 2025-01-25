@@ -18,7 +18,7 @@ struct SelectEntry {
     std::list<SelectEntry> m_SubEntries;
 };
 
-class Select : public DialogImGui {
+class Select : public ImGuiDialog {
 public:
     typedef bool (*Callbk)(Select*, int, char*, void*);
     Select();
@@ -37,7 +37,7 @@ public:
     void DrawMenu(std::list<SelectEntry>& entries);
 };
 
-class InputBox : public DialogImGui {
+class InputBox : public ImGuiDialog {
 public:
     typedef bool (*Callbk)(InputBox*, char*, void*);
     InputBox();

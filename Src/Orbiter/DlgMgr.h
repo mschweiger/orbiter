@@ -11,7 +11,7 @@
 #include "Orbiter.h"
 #include <list>
 #include "imgui.h"
-class DialogImGui;
+class ImGuiDialog;
 
 class oapi::GraphicsClient;
 extern Orbiter *g_pOrbiter;
@@ -156,12 +156,12 @@ private:
 	// ====================================================================
 	// ImGui management
 	// ====================================================================
-	std::list<DialogImGui*> DlgImGuiList;
+	std::list<ImGuiDialog*> DlgImGuiList;
 public:
 	// Make sure that a dialog of type DlgType is open and return a pointer to it.
 	// This opens the dialog if not yet present.
 	// Use this function for dialogs that should only have a single instance
-	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	template<typename T, std::enable_if_t<std::is_base_of_v<ImGuiDialog, T>, bool> = true>
 	T* EnsureEntry()
 	{
 		T* dlg = EntryExists<T>();
@@ -175,7 +175,7 @@ public:
 	// Create a new instance of dialog type DlgType and return a pointer to it.
 	// This opens a new dialog, even if one of this type was open already.
 	// Use this function for dialogs that can have multiple instances.
-	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	template<typename T, std::enable_if_t<std::is_base_of_v<ImGuiDialog, T>, bool> = true>
 	T* MakeEntry()
 	{
 		T* pDlg = new T();
@@ -185,7 +185,7 @@ public:
 
 	// Returns a pointer to the first instance of dialog type DlgType,
 	// or 0 if no instance exists.
-	template<typename T, std::enable_if_t<std::is_base_of_v<DialogImGui, T>, bool> = true>
+	template<typename T, std::enable_if_t<std::is_base_of_v<ImGuiDialog, T>, bool> = true>
 	T* EntryExists()
 	{
 		for (auto& e : DlgImGuiList) {
@@ -195,7 +195,7 @@ public:
 		return nullptr;
 	}
 
-	void AddEntry(DialogImGui* dlg)
+	void AddEntry(ImGuiDialog* dlg)
 	{
 		for (auto& e : DlgImGuiList) {
 			if (e == dlg) {
@@ -205,7 +205,7 @@ public:
 		DlgImGuiList.push_back(dlg);
 	}
 
-	bool DelEntry(DialogImGui* dlg)
+	bool DelEntry(ImGuiDialog* dlg)
 	{
 		for (auto it = DlgImGuiList.begin(); it != DlgImGuiList.end(); ) {
 			if (*it == dlg) {
