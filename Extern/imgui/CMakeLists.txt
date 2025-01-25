@@ -5,7 +5,7 @@ Include(FetchContent)
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG v1.91.6-docking
+  GIT_TAG v1.91.7-docking
   PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/imconfig.h .
   UPDATE_DISCONNECTED 1
 )
