@@ -496,3 +496,22 @@ void ImGuiDialog::Display() {
 	ImGui::End();
 	if (!active) OnClose();
 }
+
+// ImGui utils
+namespace ImGui {
+	// Resettable slider from https://github.com/ocornut/imgui/issues/1751
+	DLLEXPORT bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format)
+	{
+		bool ret = ImGui::SliderFloat(label, v, v_min, v_max, display_format);
+		if (ImGui::BeginPopupContextItem(label))
+		{
+			char buf[64];
+			sprintf(buf, "Reset to %f", v_default);
+			if (ImGui::MenuItem(buf))
+				*v = v_default;
+			ImGui::MenuItem("Close");
+			ImGui::EndPopup();
+		}
+		return ret;
+	}
+}

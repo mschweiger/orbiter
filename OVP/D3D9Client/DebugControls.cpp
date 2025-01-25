@@ -63,39 +63,24 @@ void OpenGFXDlgClbk(void *context);
 
 class GFXDialog: public ImGuiDialog
 {
-	// Resettable slider from https://github.com/ocornut/imgui/issues/1751
-	static bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format = "%.3f")
-	{
-		bool ret = ImGui::SliderFloat(label, v, v_min, v_max, display_format);
-		if (ImGui::BeginPopupContextItem(label))
-		{
-			char buf[64];
-			sprintf(buf, "Reset to %f", v_default);
-			if (ImGui::MenuItem(buf))
-				*v = v_default;
-			ImGui::MenuItem("Close");
-			ImGui::EndPopup();
-		}
-		return ret;
-	}
 public:
-	GFXDialog(const char *name):ImGuiDialog(name) {}
+	GFXDialog():ImGuiDialog("Graphics Controls") {}
 	void OnDraw() override {
 		ImGui::PushItemWidth(150.0);
 		ImGui::SeparatorText("Post Processing Configuration");
 
 
-		SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
-		SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
-		SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.5f, 2.0f, 1.1f, "%1.2f");
-		SliderFloatReset("Gamma", &Config->GFXGamma, 0.3f, 2.5f, 1.0f, "%1.2f");
+		ImGui::SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
+		ImGui::SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
+		ImGui::SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.5f, 2.0f, 1.1f, "%1.2f");
+		ImGui::SliderFloatReset("Gamma", &Config->GFXGamma, 0.3f, 2.5f, 1.0f, "%1.2f");
 
 		ImGui::SeparatorText("Light Configuration");
 
-		SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.5f, 2.5f, 1.2f, "%1.2f");
-		SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.01f, 2.0f, 0.7f, "%1.2f");
-		SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.001f, 1.0f, 0.5f, "%1.2f");
-		SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.001f, 1.0f, 0.5f, "%1.2f");
+		ImGui::SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.5f, 2.5f, 1.2f, "%1.2f");
+		ImGui::SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.01f, 2.0f, 0.7f, "%1.2f");
+		ImGui::SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.001f, 1.0f, 0.5f, "%1.2f");
+		ImGui::SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.001f, 1.0f, 0.5f, "%1.2f");
 
 		if(ImGui::Button("Recrete Sun/Glares")) {
 			g_client->GetScene()->CreateSunGlare();
@@ -221,7 +206,7 @@ void Create()
 		dwCmd = 0;
 	}
 
-	gfxDlg = new GFXDialog("Graphic Controls");
+	gfxDlg = new GFXDialog();
 	dwGFX = oapiRegisterCustomCmd((char*)"D3D9 Graphics Controls", (char*)"This dialog allows to control various graphics options", OpenGFXDlgClbk, gfxDlg);
 
 	resbias = 4.0 + Config->LODBias;

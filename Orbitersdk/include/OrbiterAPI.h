@@ -7629,6 +7629,10 @@ inline VECTOR3 POINTERTOREF (VECTOR3 *p)
 	return v;
 }
 
+// ImGui extras
+namespace ImGui {
+	OAPIFUNC bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format = "%.3f");
+};
 // ======================================================================
 // Internal data structures
 // ======================================================================
