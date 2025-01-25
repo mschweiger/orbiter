@@ -84,17 +84,18 @@ public:
 		ImGui::PushItemWidth(150.0);
 		ImGui::SeparatorText("Post Processing Configuration");
 
+
 		SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
 		SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
-		SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.0f, 1.1f, 1.1f, "%1.2f");
-		SliderFloatReset("Gamma", &Config->GFXGamma, 0.0f, 1.0f, 1.0f, "%1.2f");
+		SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.5f, 2.0f, 1.1f, "%1.2f");
+		SliderFloatReset("Gamma", &Config->GFXGamma, 0.3f, 2.5f, 1.0f, "%1.2f");
 
 		ImGui::SeparatorText("Light Configuration");
 
-		SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.0f, 1.0f, 1.2f, "%1.2f");
-		SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.0f, 1.0f, 1.0f, "%1.2f");
-		SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.0f, 1.0f, 0.5f, "%1.2f");
-		SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.0f, 1.0f, 0.3f, "%1.2f");
+		SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.5f, 2.5f, 1.2f, "%1.2f");
+		SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.01f, 2.0f, 0.7f, "%1.2f");
+		SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.001f, 1.0f, 0.5f, "%1.2f");
+		SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.001f, 1.0f, 0.5f, "%1.2f");
 
 		if(ImGui::Button("Recrete Sun/Glares")) {
 			g_client->GetScene()->CreateSunGlare();
