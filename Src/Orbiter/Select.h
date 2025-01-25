@@ -21,7 +21,12 @@ class Select : public ImGuiDialog {
 public:
     typedef bool (*Callbk)(Select*, int, char*, void*);
     Select();
-    void Draw() override;
+    void Display() override {
+		OnDraw();
+		if (!active) OnClose();
+	}
+
+	void OnDraw() override;
     bool opened;
     std::string title;
     std::list<SelectEntry> rootmenu;
@@ -40,7 +45,11 @@ class InputBox : public ImGuiDialog {
 public:
     typedef bool (*Callbk)(InputBox*, char*, void*);
     InputBox();
-    void Draw() override;
+    void Display() override {
+		OnDraw();
+		if (!active) OnClose();
+	}
+	void OnDraw() override;
     bool opened;
     std::string title;
     Callbk cbEnter;

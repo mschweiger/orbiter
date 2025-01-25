@@ -79,29 +79,27 @@ class GFXDialog: public ImGuiDialog
 		return ret;
 	}
 public:
-	void Draw() {
-		if(ImGui::Begin("Graphics controls", &active)) {
-			ImGui::PushItemWidth(150.0);
-			ImGui::SeparatorText("Post Processing Configuration");
+	GFXDialog(const char *name):ImGuiDialog(name) {}
+	void OnDraw() override {
+		ImGui::PushItemWidth(150.0);
+		ImGui::SeparatorText("Post Processing Configuration");
 
-			SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
-			SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
-			SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.0f, 1.1f, 1.1f, "%1.2f");
-			SliderFloatReset("Gamma", &Config->GFXGamma, 0.0f, 1.0f, 1.0f, "%1.2f");
+		SliderFloatReset("Light glow intensity", &Config->GFXIntensity, 0.0f, 1.0f, 0.5f, "%1.2f");
+		SliderFloatReset("Light glow distance", &Config->GFXDistance, 0.0f, 1.0f, 0.8f, "%1.2f");
+		SliderFloatReset("Glow threshold", &Config->GFXThreshold, 0.0f, 1.1f, 1.1f, "%1.2f");
+		SliderFloatReset("Gamma", &Config->GFXGamma, 0.0f, 1.0f, 1.0f, "%1.2f");
 
-			ImGui::SeparatorText("Light Configuration");
+		ImGui::SeparatorText("Light Configuration");
 
-			SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.0f, 1.0f, 1.2f, "%1.2f");
-			SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.0f, 1.0f, 1.0f, "%1.2f");
-			SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.0f, 1.0f, 0.5f, "%1.2f");
-			SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.0f, 1.0f, 0.3f, "%1.2f");
+		SliderFloatReset("Sunlight Intensity", &Config->GFXSunIntensity, 0.0f, 1.0f, 1.2f, "%1.2f");
+		SliderFloatReset("Indirect Lighting", &Config->PlanetGlow, 0.0f, 1.0f, 1.0f, "%1.2f");
+		SliderFloatReset("Local Lights Max", &Config->GFXLocalMax, 0.0f, 1.0f, 0.5f, "%1.2f");
+		SliderFloatReset("Sun Glare Intensity", &Config->GFXGlare, 0.0f, 1.0f, 0.3f, "%1.2f");
 
-			if(ImGui::Button("Recrete Sun/Glares")) {
-				g_client->GetScene()->CreateSunGlare();
-			}
-			ImGui::PopItemWidth();
+		if(ImGui::Button("Recrete Sun/Glares")) {
+			g_client->GetScene()->CreateSunGlare();
 		}
-		ImGui::End();
+		ImGui::PopItemWidth();
 	}
 };
 
@@ -222,7 +220,7 @@ void Create()
 		dwCmd = 0;
 	}
 
-	gfxDlg = new GFXDialog;
+	gfxDlg = new GFXDialog("Graphic Controls");
 	dwGFX = oapiRegisterCustomCmd((char*)"D3D9 Graphics Controls", (char*)"This dialog allows to control various graphics options", OpenGFXDlgClbk, gfxDlg);
 
 	resbias = 4.0 + Config->LODBias;

@@ -648,23 +648,43 @@ typedef struct {
 	SURFHANDLE tex;    ///<     particle texture handle (NULL for default)
 } PARTICLESTREAMSPEC;
 
-
+/**
+ * \defgroup imguidialog ImGui dialog
+ *
+ * This group defines ImGuiDialog definition.
+ */
+//@{
+/**
+ * \brief Base class for defining an ImGui dialog.
+ */
 class OAPIFUNC ImGuiDialog {
+	const std::string name;
 public:
-	virtual ~ImGuiDialog() = default;
+	/**
+	 * \brief Create an ImGui dialog object.
+	 * \param name Name of the dialog window
+	 * \note This class must by derived from in order to define a custom ImGui dialog
+	 */
+	ImGuiDialog(const char *n):name(n) {}
+	virtual ~ImGuiDialog();
 	bool IsActive() { return active; }
 	void Activate() { active = true; }
-	void Display() {
-		Draw();
-		if (!active) OnClose();
-	}
-	virtual void OnClose() {};
-private:
-	virtual void Draw() = 0;
+	virtual void Display();
 protected:
+	/**
+	 * \brief Callback that is executed when the dialog is closed.
+	 * \note The default behavior is to do nothing
+	 */
+	virtual void OnClose() {};
+	/**
+	 * \brief Callback that is executed when the dialog should be drawn.
+	 * \note Orbiter takes care of doing the ImGui::Begin() / ImGui::End() pair
+	 * required to create the window and handle its visibility.
+	 * \note ImGui documentation is available at https://github.com/ocornut/imgui
+	 */
+	virtual void OnDraw() = 0;
 	bool active = false;
 };
-
 
 /**
  * \defgroup locallight Local lighting interface

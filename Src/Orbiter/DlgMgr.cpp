@@ -2,7 +2,9 @@
 // Licensed under the MIT License
 
 #define EXPORT_IMGUI_CONTEXT
+#define OAPI_IMPLEMENTATION
 #include <stdio.h>
+#include "OrbiterAPI.h"
 #include "DlgMgr.h"
 #include "Resource.h"
 #include "Orbiter.h"
@@ -480,4 +482,17 @@ void DialogManager::ImGuiNewFrame()
 		}
 	}
 	ImGui::EndFrame();
+}
+
+ImGuiDialog::~ImGuiDialog(){
+	// Make sure this dialog is no longer referenced in the DialogManager
+	oapiCloseDialog(this);
+}
+
+void ImGuiDialog::Display() {
+	if(ImGui::Begin(name.c_str(), &active)) {
+		OnDraw();
+	}
+	ImGui::End();
+	if (!active) OnClose();
 }

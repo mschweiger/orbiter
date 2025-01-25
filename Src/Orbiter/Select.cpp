@@ -4,7 +4,7 @@
 #include "Select.h"
 #include "imgui.h"
 
-Select::Select() {
+Select::Select():ImGuiDialog("Select") {
     active = false;
     opened = false;
     title = "Selection";
@@ -75,7 +75,7 @@ void Select::DrawMenu(std::list<SelectEntry>& entries) {
     }
 }
 
-void Select::Draw() {
+void Select::OnDraw() {
     auto& io = ImGui::GetIO();
 
     if (io.MouseDown[0] && opened) {
@@ -99,7 +99,7 @@ void Select::Draw() {
     }
 }
 
-InputBox::InputBox() {
+InputBox::InputBox():ImGuiDialog("InputBox") {
     active = false;
     opened = false;
     title = "InputBox";
@@ -132,7 +132,7 @@ bool InputBox::OpenEx(const char *_title, char *_buf, int _vislen,
     return true;
 }
 
-void InputBox::Draw() {
+void InputBox::OnDraw() {
     char buf[256];
     sprintf(buf, "%s###InputBox", title.c_str());
 
