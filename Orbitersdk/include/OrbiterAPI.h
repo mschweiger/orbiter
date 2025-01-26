@@ -7632,6 +7632,7 @@ inline VECTOR3 POINTERTOREF (VECTOR3 *p)
 // ImGui extras
 namespace ImGui {
 	OAPIFUNC bool SliderFloatReset(const char* label, float* v, float v_min, float v_max, float v_default, const char* display_format = "%.3f");
+	OAPIFUNC void HelpMarker(const char* desc, bool sameline = true);
 };
 // ======================================================================
 // Internal data structures

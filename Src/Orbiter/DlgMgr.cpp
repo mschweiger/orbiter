@@ -11,6 +11,7 @@
 #include "Log.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
+#include "IconsFontAwesome6.h"
 
 using namespace oapi;
 
@@ -446,13 +447,16 @@ void DialogManager::InitImGui()
 
 	ImFontConfig config;
 
+	static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
 	ImFontConfig icons_config;
 	icons_config.MergeMode = true;
 	icons_config.PixelSnapH = true;
 	icons_config.FontDataOwnedByAtlas = false;
 
 	io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 14.0f, &config, GetGlyphRangesOrbiter());
+	io.Fonts->AddFontFromFileTTF("fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
 	io.Fonts->Build();
+	
 
 	ImGui_ImplWin32_Init(hWnd);
 	gc->clbkImGuiInit();
@@ -513,5 +517,20 @@ namespace ImGui {
 			ImGui::EndPopup();
 		}
 		return ret;
+	}
+
+	// From imgui_demo.cpp, with added sameline argument
+	DLLEXPORT void HelpMarker(const char* desc, bool sameline)
+	{
+		if(sameline)
+			ImGui::SameLine();
+		ImGui::TextDisabled(ICON_FA_CIRCLE_QUESTION);
+		if (ImGui::BeginItemTooltip())
+		{
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			ImGui::TextUnformatted(desc);
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
 	}
 }
