@@ -855,8 +855,12 @@ void Orbiter::PreCloseSession()
 	// DEBUG
 	if (pDlgMgr)  { pDlgMgr->Clear(); }
 
-	if (gclient && pConfig->CfgDebugPrm.bSaveExitScreen)
+	if (gclient && pConfig->CfgDebugPrm.bSaveExitScreen) {
+		// Render the scene once without the ImGui dialogs shown
+		// so they don't appear on the preview
+		Render3DEnvironment(true);
 		gclient->clbkSaveSurfaceToImage (0, "Images\\CurrentState", oapi::IMAGE_JPG);
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -973,13 +977,15 @@ void Orbiter::BroadcastGlobalInit ()
 // Render3DEnvironment()
 // Draws the scene
 
-HRESULT Orbiter::Render3DEnvironment ()
+HRESULT Orbiter::Render3DEnvironment (bool hidedialogs)
 {
 	if (gclient) {
-		pDlgMgr->ImGuiNewFrame();
+		if(!hidedialogs)
+			pDlgMgr->ImGuiNewFrame();
 		gclient->clbkRenderScene ();
 		Output2DData ();
-		gclient->clbkImGuiRenderDrawData();
+		if(!hidedialogs)
+			gclient->clbkImGuiRenderDrawData();
 		gclient->clbkDisplayFrame ();
 	}
     return S_OK;

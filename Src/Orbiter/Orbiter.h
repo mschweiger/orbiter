@@ -62,7 +62,7 @@ public:
 	bool InitializeWorld (char *name);
 	void ScreenToClient (POINT *pt) const;
     LRESULT MsgProc (HWND, UINT, WPARAM, LPARAM);
-	HRESULT Render3DEnvironment();
+	HRESULT Render3DEnvironment(bool hidedialogs = false);
 	VOID Output2DData ();
 	void OutputLoadStatus (const char *msg, int line);
 	void OutputLoadTick (int line, bool ok = true);
