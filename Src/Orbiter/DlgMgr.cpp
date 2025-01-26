@@ -533,9 +533,10 @@ void DialogManager::InitImGui()
 	icons_config.MergeMode = true;
 	icons_config.PixelSnapH = true;
 	icons_config.FontDataOwnedByAtlas = false;
-
-	io.Fonts->AddFontFromFileTTF("Roboto-Medium.ttf", 14.0f, &config, GetGlyphRangesOrbiter());
-	io.Fonts->AddFontFromFileTTF("fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
+	
+	const CFG_FONTPRM &prm = g_pOrbiter->Cfg()->CfgFontPrm;
+	io.Fonts->AddFontFromFileTTF(prm.ImGui_FontFile, prm.ImGui_FontSize, &config, ImGui::GetIO().Fonts->GetGlyphRangesJapanese());
+	io.Fonts->AddFontFromFileTTF("fa-solid-900.ttf", prm.ImGui_FontSize, &icons_config, icons_ranges);
 	io.Fonts->Build();
 	
 

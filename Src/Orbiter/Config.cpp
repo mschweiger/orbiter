@@ -227,7 +227,9 @@ CFG_DEMOPRM CfgDemoPrm_default = {
 
 CFG_FONTPRM CfgFontPrm_default = {
 	1.0f,		// dlgFont_Scale (scaling factor for inline dialog fonts)
-	"Arial"		// dlgFont1_Face (default dialog font face name)
+	"Arial",	// dlgFont1_Face (default dialog font face name)
+	14.0f,		// ImGui_FontSize
+	"Roboto-Medium.ttf" // ImGui_FontFile
 };
 
 CFG_CAMERAPRM CfgCameraPrm_default = {
@@ -758,6 +760,8 @@ bool Config::Load(const char *fname)
 	// font characteristics
 	if (GetReal (ifs, "DialogFont_Scale", d)) CfgFontPrm.dlgFont_Scale = (float)d;
 	GetString (ifs, "DialogFont1_Face", CfgFontPrm.dlgFont1_Face);
+	if (GetReal (ifs, "ImGui_FontSize", d)) CfgFontPrm.ImGui_FontSize = (float)d;
+	GetString (ifs, "ImGui_FontFile", CfgFontPrm.ImGui_FontFile);
 
 	// misc. options
 	if (GetString (ifs, "LPadRect", cbuf)) {
@@ -1332,6 +1336,10 @@ BOOL Config::Write (const char *fname) const
 			ofs << "DialogFont_Scale = " << CfgFontPrm.dlgFont_Scale << '\n';
 		if (strcmp (CfgFontPrm.dlgFont1_Face, CfgFontPrm_default.dlgFont1_Face) || bEchoAll)
 			ofs << "DialogFont1_Face = " << CfgFontPrm.dlgFont1_Face << '\n';
+		if (CfgFontPrm.ImGui_FontSize != CfgFontPrm_default.ImGui_FontSize || bEchoAll)
+			ofs << "ImGui_FontSize = " << CfgFontPrm.ImGui_FontSize << '\n';
+		if (strcmp (CfgFontPrm.ImGui_FontFile, CfgFontPrm_default.ImGui_FontFile) || bEchoAll)
+			ofs << "ImGui_FontFile = " << CfgFontPrm.ImGui_FontFile << '\n';
 	}
 
 	if (memcmp (&CfgWindowPos, &CfgWindowPos_default, sizeof(CFG_WINDOWPOS)) || bEchoAll) {

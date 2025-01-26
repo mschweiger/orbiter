@@ -253,6 +253,8 @@ struct CFG_DEMOPRM {
 struct CFG_FONTPRM {
 	float  dlgFont_Scale;		// font scaling factor
 	char   dlgFont1_Face[64];	// dialog font face name
+	float  ImGui_FontSize;		// Font size for ImGui dialogs
+	char   ImGui_FontFile[256];	// Font file for ImGui default font
 };
 
 struct CFG_CAMERAPRM {
