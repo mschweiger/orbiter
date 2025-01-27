@@ -6,6 +6,7 @@ endif(NOT DEFINED ORBITER_BINARY_ROOT_DIR)
 
 add_subdirectory(Lua)
 add_subdirectory(zlib)
+add_subdirectory(imgui)
 
 ## LFS
 add_library(lfs SHARED luafilesystem/src/lfs.c)

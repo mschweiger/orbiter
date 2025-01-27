@@ -96,16 +96,12 @@ const char *CLBKNAME[NCLBK] = {
 	"getradiationforce"
 };
 
-static NOTEHANDLE errorbox;
 DLLCLBK void InitModule (HINSTANCE hDLL)
 {
-	errorbox = ::oapiCreateAnnotation(false, 1, _V(1.0,0,0));
-	::oapiAnnotationSetPos (errorbox, 0, 0.75, 1, 1);
 }
 
 DLLCLBK void ExitModule (HINSTANCE hDLL)
 {
-	oapiDelAnnotation(errorbox);
 }
 
 static VECTOR3 lua_tovector(lua_State* L, int idx)
@@ -260,7 +256,7 @@ int ScriptVessel::LuaCall(lua_State *L, int narg, int nres)
 	lua_remove(L, base);
 	if(res != 0) {
 		oapiWriteLogError("%s", lua_tostring(L, -1));
-		oapiAnnotationSetText(errorbox, const_cast<char *>(lua_tostring(L, -1)));
+		oapiAddNotification(OAPINOTIF_ERROR, "Lua vessel error", lua_tostring(L, -1));
 	}
 	return res;
 }

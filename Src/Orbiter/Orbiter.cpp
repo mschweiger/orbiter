@@ -43,11 +43,15 @@
 #include "DlgCtrl.h"
 #include "GraphicsAPI.h"
 #include "ConsoleManager.h"
+#include "imgui.h"
+#include "imgui_impl_win32.h"
 #include <filesystem>
 namespace fs = std::filesystem;
 
 using namespace std;
 using namespace oapi;
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 #define OUTPUT_DBG
 #define LOADSTATUSCOL 0xC08080 //0xFFD0D0
@@ -710,6 +714,24 @@ HWND Orbiter::CreateRenderWindow (Config *pCfg, const char *scenario)
 			plZ4 = 1; // invalidate
 	}
 
+	if (gclient) {
+		// GDI resources - NOT VALID FOR ALL CLIENTS!
+		InitializeGDIResources (hRenderWnd);
+		pDlgMgr = new DialogManager (this, hRenderWnd);
+
+		// global dialog resources
+		g_select = new Select(); TRACENEW
+		pDlgMgr->AddEntry(g_select);
+		g_input = new InputBox(); TRACENEW
+		pDlgMgr->AddEntry(g_input);
+
+		// playback screen annotation manager
+		snote_playback = gclient->clbkCreateAnnotation ();
+	}
+	else {
+		pDlgMgr = new DialogManager(this, m_pConsole->WindowHandle());
+	}
+
 	// read simulation environment state
 	strcpy (ScenarioName, scenario);
 	g_qsaveid = 0;
@@ -752,23 +774,6 @@ HWND Orbiter::CreateRenderWindow (Config *pCfg, const char *scenario)
 		if (g_pane) g_pane->SetFOV (g_camera->Aperture());
 	}
 	LOGOUT ("Finished initialising camera");
-
-	if (gclient) {
-		// GDI resources - NOT VALID FOR ALL CLIENTS!
-		InitializeGDIResources (hRenderWnd);
-		pDlgMgr = new DialogManager (this, hRenderWnd);
-
-		// global dialog resources
-		InlineDialog::GlobalInit (gclient);
-		g_select = new Select (gclient, hRenderWnd); TRACENEW
-		g_input = new InputBox (gclient, hRenderWnd, 256); TRACENEW
-		
-		// playback screen annotation manager
-		snote_playback = gclient->clbkCreateAnnotation ();
-	}
-	else {
-		pDlgMgr = new DialogManager(this, m_pConsole->WindowHandle());
-	}
 
 	bSession = true;
 	bVisible = (hRenderWnd != NULL);
@@ -852,8 +857,12 @@ void Orbiter::PreCloseSession()
 	// DEBUG
 	if (pDlgMgr)  { pDlgMgr->Clear(); }
 
-	if (gclient && pConfig->CfgDebugPrm.bSaveExitScreen)
+	if (gclient && pConfig->CfgDebugPrm.bSaveExitScreen) {
+		// Render the scene once without the ImGui dialogs shown
+		// so they don't appear on the preview
+		Render3DEnvironment(true);
 		gclient->clbkSaveSurfaceToImage (0, "Images\\CurrentState", oapi::IMAGE_JPG);
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -897,7 +906,6 @@ void Orbiter::CloseSession ()
 			snote = NULL;
 			nsnote = 0;
 		}
-		InlineDialog::GlobalExit (gclient);
 
 		if (g_input)  { delete g_input; g_input = 0; }
 		if (g_select) { delete g_select; g_select = 0; }
@@ -971,11 +979,15 @@ void Orbiter::BroadcastGlobalInit ()
 // Render3DEnvironment()
 // Draws the scene
 
-HRESULT Orbiter::Render3DEnvironment ()
+HRESULT Orbiter::Render3DEnvironment (bool hidedialogs)
 {
 	if (gclient) {
+		if(!hidedialogs)
+			pDlgMgr->ImGuiNewFrame();
 		gclient->clbkRenderScene ();
 		Output2DData ();
+		if(!hidedialogs)
+			gclient->clbkImGuiRenderDrawData();
 		gclient->clbkDisplayFrame ();
 	}
     return S_OK;
@@ -1473,7 +1485,10 @@ VOID Orbiter::Quicksave ()
 	for (i = strlen(ScenarioName)-1; i > 0; i--)
 		if (ScenarioName[i-1] == '\\') break;
 	sprintf (fname, "Quicksave\\%s %04d", ScenarioName+i, ++g_qsaveid);
-	SaveScenario (fname, desc, 0);
+	if(SaveScenario (fname, desc, 0))
+		oapiAddNotification(OAPINOTIF_SUCCESS, "Scenario saved successfully", fname);
+	else
+		oapiAddNotification(OAPINOTIF_ERROR, "Failed to save scenario", fname);
 }
 
 //-----------------------------------------------------------------------------
@@ -1771,8 +1786,6 @@ VOID Orbiter::Output2DData ()
 		for (DWORD i = 0; i < nsnote; i++)
 			snote[i]->Render();
 		if (snote_playback && pConfig->CfgRecPlayPrm.bShowNotes) snote_playback->Render();
-		if (g_select->IsActive()) g_select->Display(0/*oclient->m_pddsRenderTarget*/);
-		if (g_input->IsActive()) g_input->Display(0/*oclient->m_pddsRenderTarget*/);
 	}
 }
 
@@ -2502,10 +2515,6 @@ bool Orbiter::MouseEvent (UINT event, DWORD state, DWORD x, DWORD y)
 	if (event == WM_MOUSEMOVE) return false; // may be lifted later
 
 	if (bRunning) {
-		if (event == WM_LBUTTONDOWN || event == WM_RBUTTONDOWN) {
-			if (g_input && g_input->IsActive()) g_input->Close();
-			if (g_select && g_select->IsActive()) g_select->Clear (true);
-		}
 		if (g_pane->ProcessMouse_OnRunning (event, state, x, y, simkstate)) return true;
 	}
 	if (g_pane->ProcessMouse_System(event, state, x, y, simkstate)) return true;
@@ -2557,7 +2566,8 @@ void Orbiter::BroadcastBufferedKeyboardEvent (char *kstate, DIDEVICEOBJECTDATA *
 
 LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	WORD kmod;
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+		return true;
 
 	switch (uMsg) {
 
@@ -2565,35 +2575,13 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		bActive = (wParam != WA_INACTIVE);
 		return 0;
 
-	case WM_CHAR:
-		// make dialogs modal to avoid complications
-		if (g_input && g_input->IsActive()) {
-			if (g_input->ConsumeKey (uMsg, wParam) != Select::key_ignore) bRenderOnce = TRUE;
-			return 0;
-		}
-		if (g_select && g_select->IsActive()) {
-			if (g_select->ConsumeKey (uMsg, wParam) != Select::key_ignore) bRenderOnce = TRUE;
-			return 0;
-		}
-		break;
-
 	// *** User Keyboard Input ***
+	case WM_CHAR:
 	case WM_KEYDOWN:
-
-		// modifiers
-		kmod = 0;
-		if (GetKeyState (VK_SHIFT)   & 0x8000) kmod |= 0x01;
-		if (GetKeyState (VK_CONTROL) & 0x8000) kmod |= 0x02;
-
-		// make dialogs modal to avoid complications
-		if (g_input && g_input->IsActive()) {
-			if (g_input->ConsumeKey (uMsg, wParam, kmod) != Select::key_ignore) bRenderOnce = TRUE;
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureKeyboard) {
 			return 0;
 		}
-		if (g_select && g_select->IsActive()) {
-			if (g_select->ConsumeKey (uMsg, wParam, kmod) != Select::key_ignore) bRenderOnce = TRUE;
-			return 0;
-		}
+
 		break;
 
 	// Mouse event handler
@@ -2601,10 +2589,18 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_RBUTTONDOWN:
 	case WM_LBUTTONUP:
 	case WM_RBUTTONUP: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		if (MouseEvent(uMsg, wParam, LOWORD(lParam), HIWORD(lParam)))
 			break; //return 0;
 		} break;
 	case WM_MOUSEWHEEL: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		int x = LOWORD(lParam);
 		int y = HIWORD(lParam);
 		if (!bFullscreen) {
@@ -2617,6 +2613,10 @@ LRESULT Orbiter::MsgProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			break; //return 0;
 		} break;
 	case WM_MOUSEMOVE: {
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantCaptureMouse) {
+			return 0;
+		}
+
 		int x = LOWORD(lParam);
 		int y = HIWORD(lParam);
 		MouseEvent(uMsg, wParam, x, y);

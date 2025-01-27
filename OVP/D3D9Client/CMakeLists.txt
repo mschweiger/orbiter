@@ -2,6 +2,7 @@
 project(D3D9Client VERSION 31.0)
 
 configure_file(D3D9ClientConfig.h.in D3D9ClientConfig.h)
+FetchContent_MakeAvailable(imgui)
 
 # specify the C++ standard
 # set(CMAKE_CXX_STANDARD 11)
@@ -67,6 +68,7 @@ set(SourceFiles
 	WindowMgr.cpp
 	ZTreeMgr.cpp
 	Tilemgr2_imp.hpp
+	${imgui_SOURCE_DIR}/backends/imgui_impl_dx9.cpp
 )
 
 set(IncludeFiles
@@ -171,6 +173,8 @@ add_library(D3D9Client MODULE
 target_include_directories(D3D9Client PUBLIC
 	${ORBITER_SOURCE_SDK_INCLUDE_DIR}
 	${DXSDK_DIR}/Include
+	${imgui_SOURCE_DIR}/
+	${imgui_SOURCE_DIR}/backends/
 )
 
 target_link_directories(D3D9Client PUBLIC
