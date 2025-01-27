@@ -234,10 +234,8 @@ public:
 	void term_setverbosity (int level) { term_verbose = level; }
 
 	static int LuaCall(lua_State *L, int nargs, int nres);
-	void SetErrorBox(NOTEHANDLE eb) { errorbox = eb; }
 	static void DeleteVessel (OBJHANDLE hVessel);
 protected:
-	static inline NOTEHANDLE errorbox;
 	lua_State *L;         // Lua main context
 
 	/**
@@ -403,6 +401,7 @@ protected:
 	static int oapiOpenInputBox (lua_State *L);
 	static int oapiReceiveInput (lua_State *L);
 	static int oapi_open_inputboxex (lua_State *L);
+	static int oapi_add_notification (lua_State *L);
 	static int oapi_global_to_equ(lua_State* L);
 	static int oapi_global_to_local(lua_State* L);
 	static int oapi_local_to_equ(lua_State* L);

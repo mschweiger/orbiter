@@ -295,6 +295,13 @@
 -- @field NOISE Enable/Setup Noise generation
 -- @table PRM
 
+--- Notification types
+-- @field NOTIF_SUCCESS
+-- @field NOTIF_WARNING
+-- @field NOTIF_ERROR
+-- @field NOTIF_INFO
+-- @table OAPINOTIF
+
 --- PlaybackType.
 --
 -- Determines how a given sound will be played back (i.e., where it will be audible)

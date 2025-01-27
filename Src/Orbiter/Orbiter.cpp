@@ -1483,7 +1483,10 @@ VOID Orbiter::Quicksave ()
 	for (i = strlen(ScenarioName)-1; i > 0; i--)
 		if (ScenarioName[i-1] == '\\') break;
 	sprintf (fname, "Quicksave\\%s %04d", ScenarioName+i, ++g_qsaveid);
-	SaveScenario (fname, desc, 0);
+	if(SaveScenario (fname, desc, 0))
+		oapiAddNotification(OAPINOTIF_SUCCESS, "Scenario saved successfully", fname);
+	else
+		oapiAddNotification(OAPINOTIF_ERROR, "Failed to save scenario", fname);
 }
 
 //-----------------------------------------------------------------------------

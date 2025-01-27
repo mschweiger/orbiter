@@ -355,6 +355,20 @@ typedef struct {
 #define OAPISURFACE_SHARED		 0x1000 ///< Create a shared resource
 //@}
 
+
+/**
+ * \ingroup defines
+ * \defgroup notification Notification type
+ * These constants specified the type of notification to display.
+ * \sa oapiAddNotification
+ */
+//@{
+#define OAPINOTIF_SUCCESS 0 ///< Success
+#define OAPINOTIF_WARNING 1 ///< Warning
+#define OAPINOTIF_ERROR   2 ///< Error
+#define OAPINOTIF_INFO    3 ///< Info
+//@}
+
 /**
  * \ingroup defines
  * \defgroup grpedit Mesh group editing flags
@@ -6122,6 +6136,15 @@ OAPIFUNC void       oapiCloseDialog (HWND hDlg);
 	* \param dlg object pointer that was used to open the dialog box.
 	*/
 OAPIFUNC void       oapiCloseDialog (ImGuiDialog *dlg);
+
+	/**
+	* \brief Show a notification.
+	* \param type Type of notification
+	* \param title One liner title of the notification
+	* \param content Content of the notification (possibly multiline)
+	* \note  title and content are copied and can be safely overwritten/freed after the call
+	*/
+OAPIFUNC void      oapiAddNotification(int type, const char *title, const char *content = "");
 
 	/**
 	* \brief Retrieves the context pointer of a dialog box which has been defined during the call to oapiOpenDialog().
