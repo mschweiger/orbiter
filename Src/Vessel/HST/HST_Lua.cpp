@@ -14,9 +14,9 @@
 #ifdef SCRIPTSUPPORT
 
 extern "C" {
-#include <lua/lua.h>
-#include <lua/lualib.h>
-#include <lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 }
 
 // ==========================================================================
@@ -48,7 +48,7 @@ int HST::Lua_InitInstance(void *context)
 
 	if (lua_isnil (L, -1)) { // register new functions
 		lua_pop (L, 1);
-		static const struct luaL_reg hstLib[] = {
+		static const struct luaL_Reg hstLib[] = {
 			{"antenna", hstAntenna},
 			{"hatch", hstHatch},
 			{"array", hstArray},
@@ -59,7 +59,9 @@ int HST::Lua_InitInstance(void *context)
 		luaL_newmetatable (L, "HST.vtable");
 
 		// create a table for the overloaded methods
-		luaL_openlib (L, "HST.method", hstLib, 0);
+		luaL_newlib(L, hstLib);
+		lua_setglobal(L, "HST.method");
+		lua_getglobal(L, "HST.method");
 
 		// create metatable for accessing inherited methods from VESSEL
 		luaL_newmetatable (L, "HST.base");

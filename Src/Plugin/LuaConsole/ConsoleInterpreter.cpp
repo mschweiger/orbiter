@@ -16,14 +16,16 @@ void ConsoleInterpreter::LoadAPI ()
 {
 	Interpreter::LoadAPI();
 
-	static const struct luaL_reg termLib [] = {
+	static const struct luaL_Reg termLib [] = {
 		{"out", termOut},
 		{"clear", termClear},
 		{"lineup", termLineUp},
 		{"SetVerbosity", termSetVerbosity},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "term", termLib, 0);
+	luaL_newlib(L, termLib);
+	lua_setglobal(L, "term");
+	lua_getglobal(L, "term");
 
 	// also replace built-in print so it works as expected in the console
 	static const struct luaL_Reg printlib[] = {
@@ -31,7 +33,7 @@ void ConsoleInterpreter::LoadAPI ()
 		{NULL, NULL}
 	};
 	lua_getglobal(L, "_G");
-	luaL_register(L, NULL, printlib);
+	luaL_setfuncs(L, printlib, 0);
 }
 
 void ConsoleInterpreter::term_strout (const char *str, bool iserr)

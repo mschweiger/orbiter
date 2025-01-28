@@ -31,7 +31,7 @@ int LuaInterface::InitInstance(void *context)
 
 	if (lua_isnil(L, -1)) { // register new functions
 		lua_pop(L, 1);
-		static const struct luaL_reg qcLib[] = {
+		static const struct luaL_Reg qcLib[] = {
 			{ "set_directmode", setDirectMode},
 			{ "set_autoheading", setAutoHeading},
 			{ "set_heading", setHeading},
@@ -45,8 +45,8 @@ int LuaInterface::InitInstance(void *context)
 		// create metatable for vessel userdata
 		luaL_newmetatable(L, "QC.vtable");
 
-		// create a table for the overloaded methods
-		luaL_openlib(L, "QC.method", qcLib, 0);
+		// create a new anonymous table for the overloaded methods
+		luaL_newlib(L, qcLib);
 
 		// create metatable for accessing inherited methods from VESSEL
 		luaL_newmetatable(L, "QC.base");

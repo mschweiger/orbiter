@@ -11,9 +11,9 @@
 #include <stdio.h>
 
 extern "C" {
-#include <lua/lua.h>
-#include <lua/lualib.h>
-#include <lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 }
 
 // ==========================================================================
@@ -51,7 +51,7 @@ int DeltaGlider::Lua_InitInstance (void *context)
 
 	if (lua_isnil (L, -1)) { // register new functions
 		lua_pop (L, 1);
-		static const struct luaL_reg dgLib[] = {
+		static const struct luaL_Reg dgLib[] = {
 			{"Gear", dgGear},
 			{"Nosecone", dgNosecone},
 			{"Hatch", dgHatch},
@@ -67,7 +67,9 @@ int DeltaGlider::Lua_InitInstance (void *context)
 		luaL_newmetatable (L, "DG.vtable");
 
 		// create a table for the overloaded methods
-		luaL_openlib (L, "DG.method", dgLib, 0);
+		luaL_newlib(L, dgLib);
+		lua_setglobal(L, "DG.method");
+		lua_getglobal(L, "DG.method");
 
 		// create metatable for accessing inherited methods from VESSEL
 		luaL_newmetatable (L, "DG.base");

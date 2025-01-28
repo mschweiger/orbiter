@@ -83,7 +83,7 @@ set(ORBITER_INSTALL_DOC_DIR ${ORBITER_INSTALL_ROOT_DIR}/Doc)
 set(ORBITER_INSTALL_UTILS_DIR ${ORBITER_INSTALL_ROOT_DIR}/Utils)
 set(ORBITER_INSTALL_SDK_DIR ${ORBITER_INSTALL_ROOT_DIR}/Orbitersdk)
 
-set(ORBITER_SDK_LIB $<TARGET_FILE:Orbitersdk>)
+set(ORBITER_SDK_LIB Orbitersdk)
 set(ORBITER_DLGCTRL_LIB $<TARGET_FILE:DlgCtrl>)
 set(LUAINTERPRETER_LIB $<TARGET_LINKER_FILE:LuaInterpreter>)
 set(GDICLIENT_LIB $<TARGET_LINKER_FILE:GDIClient>)
@@ -96,7 +96,7 @@ set(HTMLHELP_LIB_DIR ${HTMLHELP_DIR}/lib-${ARCH})
 set(HTMLHELP_LIB ${HTMLHELP_LIB_DIR}/Htmlhelp.Lib)
 
 set(ORBITER_TOOL_MESHC "$<TARGET_FILE:meshc>")
-set(ldoc $<TARGET_FILE:lua::exe> ${ORBITER_BINARY_ROOT_DIR}/packages/LDoc/ldoc.lua -v --multimodule)
+set(ldoc ${ORBITER_BINARY_ROOT_DIR}/lua.exe ${ORBITER_BINARY_ROOT_DIR}/packages/LDoc/ldoc.lua -v --multimodule)
 
 find_package(OpenGL QUIET)
 find_package(HTMLHelp)
@@ -283,6 +283,20 @@ INSTALL(FILES LICENSE
 )
 #COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/Doc/TransX\ readme.txt ${ORBITER_BINARY_DOC_DIR}/TransX/TransX\ readme.txt
 
+# Package dependencies
+# See vcpkg.json
+set(INSTALL_TOOLS ON)
+find_package(Lua REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(unofficial-luafilesystem CONFIG REQUIRED)
+
+# Aliases and convenience additions
+add_library(lua::lfs ALIAS unofficial::luafilesystem::lfs)
+add_library(lua::lib ALIAS lua)
+add_executable(luai IMPORTED)
+set_target_properties(luai PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/lua/lua${CMAKE_EXECUTABLE_SUFFIX})
+add_executable(lua::exe ALIAS luai)
+
 # Sub-projects
 add_subdirectory(Extern)
 add_subdirectory(Src)
@@ -301,7 +315,7 @@ endif()
 
 configure_file(${CMAKE_SOURCE_DIR}/cmake/CPackOptions.cmake.in
 	${CMAKE_BINARY_DIR}/OrbiterCPackOptions.cmake)
-			   
+
 set(CPACK_GENERATOR "WIX;ZIP")
 set(CPACK_PACKAGE_NAME OpenOrbiter)
 set(CPACK_PACKAGE_VENDOR Orbitersim)

@@ -15,7 +15,7 @@ target_include_directories(MFDTemplate
 
 target_link_libraries(MFDTemplate
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 )
 
 add_dependencies(MFDTemplate

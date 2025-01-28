@@ -1,12 +1,4 @@
-Include(FetchContent)
-
-FetchContent_Declare(
-  Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG        v3.0.0-preview3
-)
-
-FetchContent_MakeAvailable(Catch2)
+find_package(Catch2 REQUIRED)
 
 # Utility function
 function(add_test_file test_name)
@@ -22,7 +14,7 @@ function(add_test_file test_name)
 
 	target_link_libraries(${test_name}
 		${ORBITER_LIB}
-		${ORBITER_SDK_LIB}
+		Orbitersdk
 		lua::lib
 		${LUAINTERPRETER_LIB}
 		Catch2::Catch2WithMain

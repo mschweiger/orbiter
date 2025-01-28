@@ -100,7 +100,7 @@ end
 -- to pass control back to orbiter for a new simulation cycle
 
 function proc.skip ()
-	if coroutine.running() == nil then  -- we are in the main trunk
+	if coroutine.running() then  -- we are in the main trunk
 		for i=1,branch.nslot do
 			if branch[i] ~= nil then
 				coroutine.resume (branch[i])
@@ -124,7 +124,7 @@ end
 function proc.wait_simtime (t, f, ...)
     while oapi.get_simtime() < t do
 		if f then
-			f(unpack(arg))
+			f(table.unpack({...}))
 		end
 		proc.skip()
 	end
@@ -136,7 +136,7 @@ function proc.wait_simdt (dt, f, ...)
     local t1 = oapi.get_simtime()+dt
     while oapi.get_simtime() < t1 do
 		if f then
-			f(unpack(arg))
+			f(table.unpack({...}))
 		end
 		proc.skip()
 	end
@@ -147,7 +147,7 @@ end
 function proc.wait_systime (t, f, ...)
     while oapi.get_systime() < t do
 		if f then
-			f(unpack(arg))
+			f(table.unpack({...}))
 		end
 		proc.skip()
 	end
@@ -159,7 +159,7 @@ function proc.wait_sysdt (dt, f, ...)
     local t1 = oapi.get_systime()+dt
     while oapi.get_systime() < t1 do
 		if f then
-			f(unpack(arg))
+			f(table.unpack({...}))
 		end
 		proc.skip()
 	end
@@ -171,7 +171,7 @@ function proc.wait_frames(n, f, ...)
 	local frame = 0
 	while frame < n do
 		if f then
-			f(unpack(arg))
+			f(table.unpack({...}))
 		end
 		frame = frame+1
 		proc.skip()
@@ -180,12 +180,12 @@ end
 
 -- wait for f() >= tgt
 function proc.wait_ge (f, tgt, ...)
-    while f(unpack(arg)) < tgt do proc.skip() end
+    while f(table.unpack({...})) < tgt do proc.skip() end
 end
 
 -- wait for f() <= tgt
 function proc.wait_le (f, tgt, ...)
-    while f(unpack(arg)) > tgt do proc.skip() end
+    while f(table.unpack({...})) > tgt do proc.skip() end
 end
 
 -- wait for input

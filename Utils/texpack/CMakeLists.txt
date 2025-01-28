@@ -1,13 +1,15 @@
 # Copyright (c) Martin Schweiger
 # Licensed under the MIT License
 
+find_package(ZLIB REQUIRED)
+
 add_executable(texpack
 	texpack.cpp
 )
 
 target_link_libraries(texpack
 	Shlwapi.lib
-	zlib
+	ZLIB::ZLIB
 )
 
 set_target_properties(texpack

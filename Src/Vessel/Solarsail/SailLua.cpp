@@ -4,9 +4,9 @@
 #include "SolarSail.h"
 
 extern "C" {
-#include <lua/lua.h>
-#include <lua/lualib.h>
-#include <lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 }
 
 using std::min;
@@ -40,7 +40,7 @@ int SolarSail::Lua_InitInstance (void *context)
 
 	if (lua_isnil (L, -1)) { // register new functions
 		lua_pop (L, 1);
-		static const struct luaL_reg dgLib[] = {
+		static const struct luaL_Reg dgLib[] = {
 			{"set_paddle", sailSetPaddle},
 			{NULL, NULL}
 		};
@@ -49,7 +49,9 @@ int SolarSail::Lua_InitInstance (void *context)
 		luaL_newmetatable (L, "SSail.vtable");
 
 		// create a table for the overloaded methods
-		luaL_openlib (L, "SSail.method", dgLib, 0);
+		lua_newtable(L);
+		luaL_setfuncs(L, dgLib, 0);
+		lua_setglobal(L, "SSail.method");
 
 		// create metatable for accessing inherited methods from VESSEL
 		luaL_newmetatable (L, "SSail.base");

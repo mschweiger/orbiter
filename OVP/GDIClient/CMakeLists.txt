@@ -20,7 +20,7 @@ add_dependencies(GDIClient
 
 target_link_libraries(GDIClient
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 )
 
 # Installation

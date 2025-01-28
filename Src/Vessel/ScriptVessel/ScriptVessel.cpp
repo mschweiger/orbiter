@@ -21,9 +21,9 @@
 #include <set>
 #include <vector>
 extern "C" {
-#include <lua/lua.h>
-#include <lua/lualib.h>
-#include <lua/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 }
 #include "orbitersdk.h"
 #include <filesystem>
@@ -232,7 +232,7 @@ ScriptVessel::ScriptVessel (OBJHANDLE hVessel, int flightmodel): VESSEL4 (hVesse
 ScriptVessel::~ScriptVessel ()
 {
 	// Call pseudo destructor if the script needs to do some cleanup
-	lua_getfield (L, LUA_GLOBALSINDEX, "clbk_destroy");
+	lua_getglobal(L, "clbk_destroy");
 	if(lua_isfunction (L,-1)) {
 		LuaCall (L, 0, 0);
 	}
@@ -243,7 +243,7 @@ ScriptVessel::~ScriptVessel ()
 }
 
 static int traceback(lua_State *L) {
-    lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+    lua_getglobal(L, "debug");
     lua_getfield(L, -1, "traceback");
     lua_pushvalue(L, 1);
     lua_pushinteger(L, 2);
@@ -272,8 +272,6 @@ int ScriptVessel::LuaCall(lua_State *L, int narg, int nres)
 // --------------------------------------------------------------
 // Set the capabilities of the vessel class
 // --------------------------------------------------------------
-#define lua_pushglobaltable(L) lua_pushvalue(L,LUA_GLOBALSINDEX)
-
 static std::set<std::string> GetGlobalFunctions(lua_State* L)
 {
 	std::set<std::string> ret;
@@ -329,20 +327,20 @@ void ScriptVessel::clbkSetClassCaps (FILEHANDLE cfg)
 
 	// Define the vessel instance
 	lua_pushlightuserdata(L, GetHandle());  // push vessel handle
-	lua_setfield(L, LUA_GLOBALSINDEX, "hVessel");
+	lua_setglobal(L, "hVessel");
 	strcpy(cmd, "vi = vessel.get_interface(hVessel)");
 	oapiExecScriptCmd(hInterp, cmd);
 
 	// check for defined callback functions in script
 	for (i = 0; i < NCLBK; i++) {
 		strcpy (func+5, CLBKNAME[i]);
-		lua_getfield (L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		bclbk[i] = (lua_isfunction (L,-1) != 0);
 		lua_pop(L,1);
 	}
 
 	// Call pseudo constructor method now that we have loaded the script
-	lua_getfield (L, LUA_GLOBALSINDEX, "clbk_new");
+	lua_getglobal(L, "clbk_new");
 	if(lua_isfunction (L,-1)) {
 		lua_pushnumber(L, fmodel);
 		LuaCall (L, 1, 0);
@@ -353,7 +351,7 @@ void ScriptVessel::clbkSetClassCaps (FILEHANDLE cfg)
 	// Run the SetClassCaps function
 	if (bclbk[SETCLASSCAPS]) {
 		strcpy (func+5, "setclasscaps");
-		lua_getfield (L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata (L, cfg);
 		LuaCall (L, 1, 0);
 	}
@@ -363,7 +361,7 @@ void ScriptVessel::clbkPostCreation ()
 {
 	if (bclbk[POSTCREATION]) {
 		strcpy (func+5, "postcreation");
-		lua_getfield (L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		LuaCall (L, 0, 0);
 	}
 }
@@ -372,7 +370,7 @@ void ScriptVessel::clbkPreStep (double simt, double simdt, double mjd)
 {
 	if (bclbk[PRESTEP]) {
 		strcpy (func+5, "prestep");
-		lua_getfield (L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L,simt);
 		lua_pushnumber(L,simdt);
 		lua_pushnumber(L,mjd);
@@ -384,7 +382,7 @@ void ScriptVessel::clbkPostStep (double simt, double simdt, double mjd)
 {
 	if (bclbk[POSTSTEP]) {
 		strcpy (func+5, "poststep");
-		lua_getfield (L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L,simt);
 		lua_pushnumber(L,simdt);
 		lua_pushnumber(L,mjd);
@@ -398,7 +396,7 @@ void ScriptVessel::clbkSaveState(FILEHANDLE scn)
 	VESSEL2::clbkSaveState(scn);
 	if (bclbk[SAVESTATE]) {
 		strcpy(func + 5, "savestate");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata(L, scn);
 		LuaCall(L, 1, 0);
 	}
@@ -408,7 +406,7 @@ void ScriptVessel::clbkLoadStateEx(FILEHANDLE scn, void* vs)
 {
 	if (bclbk[LOADSTATEEX]) {
 		strcpy(func + 5, "loadstateex");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata(L, scn);
 		VESSELSTATUS2* status = (VESSELSTATUS2*)lua_newuserdata(L, sizeof(VESSELSTATUS2));
 		luaL_getmetatable(L, "VESSELSTATUS2.table");   // push metatable
@@ -432,7 +430,7 @@ int ScriptVessel::clbkConsumeDirectKey(char* kstate)
 {
 	if (bclbk[CONSUMEDIRECTKEY]) {
 		strcpy(func + 5, "consumedirectkey");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata(L, kstate);
 		LuaCall(L, 1, 1);
 		bool consumed = (lua_toboolean(L, -1) ? true : false);
@@ -446,7 +444,7 @@ int ScriptVessel::clbkConsumeBufferedKey(DWORD key, bool down, char* kstate)
 {
 	if (bclbk[CONSUMEBUFFEREDKEY]) {
 		strcpy(func + 5, "consumebufferedkey");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, key);
 		lua_pushboolean(L, down);
 		lua_pushlightuserdata(L, kstate);
@@ -462,7 +460,7 @@ void ScriptVessel::clbkFocusChanged(bool getfocus, OBJHANDLE hNewVessel, OBJHAND
 {
 	if (bclbk[FOCUSCHANGED]) {
 		strcpy(func + 5, "focuschanged");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushboolean(L, getfocus);
 		lua_pushlightuserdata(L, hNewVessel);
 		if(hOldVessel)
@@ -477,7 +475,7 @@ bool ScriptVessel::clbkPlaybackEvent(double simt, double event_t, const char* ev
 {
 	if (bclbk[PLAYBACKEVENT]) {
 		strcpy(func + 5, "playbackevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, simt);
 		lua_pushnumber(L, event_t);
 		lua_pushstring(L, event_type);
@@ -494,7 +492,7 @@ void ScriptVessel::clbkRCSMode(int mode)
 {
 	if (bclbk[RCSMODE]) {
 		strcpy(func + 5, "RCSmode");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		LuaCall(L, 1, 0);
 	}
@@ -504,7 +502,7 @@ void ScriptVessel::clbkADCtrlMode(DWORD mode)
 {
 	if (bclbk[ADCTRLMODE]) {
 		strcpy(func + 5, "ADctrlmode");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		LuaCall(L, 1, 0);
 	}
@@ -514,7 +512,7 @@ void ScriptVessel::clbkHUDMode(int mode)
 {
 	if (bclbk[HUDMODE]) {
 		strcpy(func + 5, "HUDmode");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		LuaCall(L, 1, 0);
 	}
@@ -524,7 +522,7 @@ void ScriptVessel::clbkMFDMode(int mfd, int mode)
 {
 	if (bclbk[MFDMODE]) {
 		strcpy(func + 5, "MFDmode");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mfd);
 		lua_pushnumber(L, mode);
 		LuaCall(L, 2, 0);
@@ -535,7 +533,7 @@ void ScriptVessel::clbkNavMode(int mode, bool active)
 {
 	if (bclbk[NAVMODE]) {
 		strcpy(func + 5, "NAVmode");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		lua_pushboolean(L, active);
 		LuaCall(L, 2, 0);
@@ -546,7 +544,7 @@ void ScriptVessel::clbkDockEvent(int dock, OBJHANDLE mate)
 {
 	if (bclbk[DOCKEVENT]) {
 		strcpy(func + 5, "dockevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, dock);
 		if (mate)
 			lua_pushlightuserdata(L, mate);
@@ -560,7 +558,7 @@ void ScriptVessel::clbkAnimate(double simt)
 {
 	if (bclbk[ANIMATE]) {
 		strcpy(func + 5, "animate");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, simt);
 		LuaCall(L, 1, 0);
 	}
@@ -570,7 +568,7 @@ bool ScriptVessel::clbkLoadGenericCockpit()
 {
 	if (bclbk[LOADGENERICCOCKPIT]) {
 		strcpy(func + 5, "loadgenericcockpit");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		LuaCall(L, 0, 1);
 
 		bool supported = lua_toboolean(L, -1) ? true : false;
@@ -585,7 +583,7 @@ bool ScriptVessel::clbkPanelMouseEvent(int id, int event, int mx, int my, void *
 {
 	if (bclbk[PANELMOUSEEVENT]) {
 		strcpy(func + 5, "panelmouseevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		lua_pushnumber(L, event);
 		lua_pushnumber(L, mx);
@@ -606,7 +604,7 @@ bool ScriptVessel::clbkPanelRedrawEvent(int id, int event, SURFHANDLE surf, void
 {
 	if (bclbk[PANELREDRAWEVENT]) {
 		strcpy(func + 5, "panelredrawevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		lua_pushnumber(L, event);
 		lua_pushlightuserdata(L, surf);
@@ -626,7 +624,7 @@ bool ScriptVessel::clbkLoadVC(int id)
 {
 	if (bclbk[LOADVC]) {
 		strcpy(func + 5, "loadVC");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		LuaCall(L, 1, 1);
 
@@ -641,7 +639,7 @@ void ScriptVessel::clbkVisualCreated(VISHANDLE vis, int refcount)
 {
 	if (bclbk[VISUALCREATED]) {
 		strcpy(func + 5, "visualcreated");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata(L, vis);
 		lua_pushnumber(L, refcount);
 		LuaCall(L, 2, 0);
@@ -651,7 +649,7 @@ void ScriptVessel::clbkVisualDestroyed(VISHANDLE vis, int refcount)
 {
 	if (bclbk[VISUALDESTROYED]) {
 		strcpy(func + 5, "visualdestroyed");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushlightuserdata(L, vis);
 		lua_pushnumber(L, refcount);
 		LuaCall(L, 2, 0);
@@ -662,7 +660,7 @@ bool ScriptVessel::clbkVCMouseEvent(int id, int event, VECTOR3& p)
 {
 	if (bclbk[VCMOUSEEVENT]) {
 		strcpy(func + 5, "VCmouseevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		lua_pushnumber(L, event);
 		lua_pushvector(L, p);
@@ -678,7 +676,7 @@ bool ScriptVessel::clbkVCRedrawEvent(int id, int event, SURFHANDLE surf)
 {
 	if (bclbk[VCREDRAWEVENT]) {
 		strcpy(func + 5, "VCredrawevent");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		lua_pushnumber(L, event);
 		lua_pushlightuserdata(L, surf);
@@ -695,7 +693,7 @@ bool ScriptVessel::clbkLoadPanel2D (int id, PANELHANDLE hPanel, DWORD viewW, DWO
 {
 	if (bclbk[LOADPANEL2D]) {
 		strcpy(func + 5, "loadpanel2d");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, id);
 		lua_pushlightuserdata(L, hPanel);
 		lua_pushnumber(L, viewW);
@@ -736,7 +734,7 @@ static int lua_crosscall(lua_State* L) {
 	int stacksize = lua_gettop(Ltgt);
 
 	// Push the function to be called in the target
-	lua_getfield(Ltgt, LUA_GLOBALSINDEX, method);
+	lua_getglobal(Ltgt, method);
 
 	// Number of arguments pushed in the original lua_State
 	int nargs = lua_gettop(L);
@@ -956,7 +954,7 @@ bool ScriptVessel::clbkDrawHUD(int mode, const HUDPAINTSPEC* hps, oapi::Sketchpa
 	if (bclbk[DRAWHUD]) {
 
 		strcpy(func + 5, "drawHUD");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 
 		lua_createtable(L, 0, 6);
@@ -989,7 +987,7 @@ void ScriptVessel::clbkRenderHUD (int mode, const HUDPAINTSPEC *hps, SURFHANDLE 
 	VESSEL3::clbkRenderHUD(mode, hps, hTex);
 	if (bclbk[RENDERHUD]) {
 		strcpy(func + 5, "renderHUD");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		lua_createtable(L, 0, 6);
 		lua_pushnumber(L, hps->W);
@@ -1013,7 +1011,7 @@ void ScriptVessel::clbkGetRadiationForce (const VECTOR3 &mflux, VECTOR3 &F, VECT
 {
 	if (bclbk[GETRADIATIONFORCE]) {
 		strcpy(func + 5, "getradiationforce");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushvector(L, mflux);
 		if(LuaCall(L, 1, 2) != 0) {
 			lua_settop(L, 0);
@@ -1034,7 +1032,7 @@ int ScriptVessel::clbkNavProcess(int mode)
 {
 	if (bclbk[NAVPROCESS]) {
 		strcpy(func + 5, "navprocess");
-		lua_getfield(L, LUA_GLOBALSINDEX, func);
+		lua_getglobal(L, func);
 		lua_pushnumber(L, mode);
 		if(LuaCall(L, 1, 1) != 0) {
 			// If the callback failed, return the original mode so the default autopilots can take over

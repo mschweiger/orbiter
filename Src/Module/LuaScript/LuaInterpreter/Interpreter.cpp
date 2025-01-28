@@ -8,7 +8,10 @@
 #include "MFDAPI.h"
 #include "DrawAPI.h"
 #include "gcCoreAPI.h"
+
 #include <list>
+
+#include <lauxlib.h>
 
 using std::min;
 using std::max;
@@ -79,7 +82,7 @@ void Interpreter::LazyInitGCCore() {
 }
 
 static int traceback(lua_State *L) {
-    lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+    lua_getglobal(L, "debug");
     lua_getfield(L, -1, "traceback");
     lua_pushvalue(L, 1);
     lua_pushinteger(L, 2);
@@ -685,7 +688,7 @@ void Interpreter::frameskip (lua_State *L)
 {
 	if (status == 1) { // termination request
 		lua_pushboolean(L, 1);
-		lua_setfield (L, LUA_GLOBALSINDEX, "wait_exit");
+		lua_setglobal (L, "wait_exit");
 	} else {
 		EndExec();
 		WaitExec();
@@ -720,14 +723,14 @@ int Interpreter::RunChunk (const char *chunk, int n)
 			}
 		}
 		// check for leftover background jobs
-		lua_getfield (L, LUA_GLOBALSINDEX, "_nbranch");
+		lua_getglobal(L, "_nbranch");
 		LuaCall (L, 0, 1);
 		jobs = lua_tointeger (L, -1);
 		lua_pop (L, 1);
 		is_busy = false;
 	} else {
 		// idle loop: execute background jobs
-		lua_getfield (L, LUA_GLOBALSINDEX, "_idle");
+		lua_getglobal(L, "_idle");
 		LuaCall (L, 0, 1);
 		jobs = lua_tointeger (L, -1);
 		lua_pop (L, 1);
@@ -745,7 +748,7 @@ void Interpreter::term_out (lua_State *L, bool iserr)
 void Interpreter::LoadAPI ()
 {
 	// Load global functions
-	static const struct luaL_reg glob[] = {
+	static const struct luaL_Reg glob[] = {
 		{"help", help},
 		//{"api", help_api},
 		{NULL, NULL}
@@ -756,7 +759,7 @@ void Interpreter::LoadAPI ()
 	}
 
 	// Load the vector library
-	static const struct luaL_reg vecLib[] = {
+	static const struct luaL_Reg vecLib[] = {
 		{"set", vec_set},
 		{"add", vec_add},
 		{"sub", vec_sub},
@@ -769,9 +772,11 @@ void Interpreter::LoadAPI ()
 		{"unit", vec_unit},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "vec", vecLib, 0);
+	luaL_newlib(L, vecLib);
+	lua_setglobal(L, "vec");
+	lua_getglobal(L, "vec");
 
-	static const struct luaL_reg matLib[] = {
+	static const struct luaL_Reg matLib[] = {
 		{"identity", mat_identity},
 		{"mul", mat_mul},
 		{"tmul", mat_tmul},
@@ -779,17 +784,21 @@ void Interpreter::LoadAPI ()
 		{"rotm", mat_rotm},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "mat", matLib, 0);
+	luaL_newlib(L, matLib);
+	lua_setglobal(L, "mat");
+	lua_getglobal(L, "mat");
 
 	// Load the process library
-	static const struct luaL_reg procLib[] = {
+	static const struct luaL_Reg procLib[] = {
 		{"Frameskip", procFrameskip},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "proc", procLib, 0);
+	luaL_newlib(L, procLib);
+	lua_setglobal(L, "proc");
+	lua_getglobal(L, "proc");
 
 	// Load the oapi library
-	static const struct luaL_reg oapiLib[] = {
+	static const struct luaL_Reg oapiLib[] = {
 		{"get_orbiter_version", oapi_get_orbiter_version},
 		{"get_viewport_size", oapi_get_viewport_size},
 
@@ -1046,21 +1055,27 @@ void Interpreter::LoadAPI ()
 
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "oapi", oapiLib, 0);
+	luaL_newlib(L, oapiLib);
+	lua_setglobal(L, "oapi");
+	lua_getglobal(L, "oapi");
 
 	// Load the (dummy) term library
-	static const struct luaL_reg termLib[] = {
+	static const struct luaL_Reg termLib[] = {
 		{"out", termOut},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "term", termLib, 0);
+	luaL_newlib(L, termLib);
+	lua_setglobal(L, "term");
+	lua_getglobal(L, "term");
 
 	// Load XRSound library
-	static const struct luaL_reg XRSoundLib[] = {
+	static const struct luaL_Reg XRSoundLib[] = {
 		{"create_instance", xrsound_create_instance},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "xrsound", XRSoundLib, 0);
+	luaL_newlib(L, XRSoundLib);
+	lua_setglobal(L, "xrsound");
+	lua_getglobal(L, "xrsound");
 
 	// Set up global tables of constants
 
@@ -1348,7 +1363,7 @@ void Interpreter::LoadAPI ()
 
 void Interpreter::LoadMFDAPI ()
 {
-	static const struct luaL_reg mfdLib[] = {
+	static const struct luaL_Reg mfdLib[] = {
 		{"get_size", mfd_get_size},
 		{"set_title", mfd_set_title},
 		{"get_defaultpen", mfd_get_defaultpen},
@@ -1362,12 +1377,12 @@ void Interpreter::LoadMFDAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, mfdLib, 0);
+	luaL_setfuncs(L, mfdLib, 0);
 }
 
 void Interpreter::LoadNTVERTEXAPI ()
 {
-	static const struct luaL_reg ntvLib[] = {
+	static const struct luaL_Reg ntvLib[] = {
 		{"size", ntv_size},
 		{"extract", ntv_extract},
 		{"reset", ntv_reset},
@@ -1387,7 +1402,7 @@ void Interpreter::LoadNTVERTEXAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, ntvLib, 0);
+	luaL_setfuncs(L, ntvLib, 0);
 
       /* now the stack has the metatable at index 1 and
          `array' at index 2 */
@@ -1417,7 +1432,7 @@ void Interpreter::LoadNTVERTEXAPI ()
 	lua_setfield(L, -2, "__metatable");
 	lua_pop(L, 1);
 	
-	static const struct luaL_reg idxLib[] = {
+	static const struct luaL_Reg idxLib[] = {
 		{"size", idx_size},
 		{"reset", idx_reset},
 		{"append", idx_append},
@@ -1434,13 +1449,13 @@ void Interpreter::LoadNTVERTEXAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, idxLib, 0);
+	luaL_setfuncs(L, idxLib, 0);
 }
 
 void Interpreter::LoadBitAPI()
 {
 	// Load the bit library
-	static const struct luaL_reg bitLib[] = {
+	static const struct luaL_Reg bitLib[] = {
 		{"anyset", bit_anyset},
 		{"allset", bit_allset},
 		{"band", bit_and},
@@ -1455,12 +1470,14 @@ void Interpreter::LoadBitAPI()
 		{"ror", bit_ror},
 		{NULL, NULL}
 	};
-	luaL_openlib(L, "bit", bitLib, 0);
+	luaL_newlib(L, bitLib);
+	lua_setglobal(L, "bit");
+	lua_getglobal(L, "bit");
 }
 
 void Interpreter::LoadLightEmitterMethods ()
 {
-	static const struct luaL_reg methodLib[] = {
+	static const struct luaL_Reg methodLib[] = {
 		{"get_position", le_get_position},
 		{"set_position", le_set_position},
 		{"get_direction", le_get_direction},
@@ -1484,7 +1501,7 @@ void Interpreter::LoadLightEmitterMethods ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3); // metatable.__index = metatable
-	luaL_openlib (L, NULL, methodLib, 0);
+	luaL_setfuncs(L, methodLib, 0);
 
 	lua_createtable(L, 0, 3);
 	lua_pushnumber(L, LightEmitter::VIS_EXTERNAL); lua_setfield(L, -2, "EXTERNAL");
@@ -1495,7 +1512,7 @@ void Interpreter::LoadLightEmitterMethods ()
 
 void Interpreter::LoadBeaconMethods ()
 {
-	static const struct luaL_reg beaconLib[] = {
+	static const struct luaL_Reg beaconLib[] = {
 		{"__gc", beacon_collect},
 		{"__index", beacon_get},
 		{"__newindex", beacon_set},
@@ -1506,7 +1523,7 @@ void Interpreter::LoadBeaconMethods ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, beaconLib, 0);
+	luaL_setfuncs(L, beaconLib, 0);
 
 	lua_createtable(L, 0, 3);
 	lua_pushnumber(L, BEACONSHAPE_COMPACT); lua_setfield(L, -2, "COMPACT");
@@ -1518,7 +1535,7 @@ void Interpreter::LoadBeaconMethods ()
 
 void Interpreter::LoadCustomCameraMethods ()
 {
-	static const struct luaL_reg CustomCameraLib[] = {
+	static const struct luaL_Reg CustomCameraLib[] = {
 		{"__gc", customcamera_collect},
 		{NULL, NULL}
 	};
@@ -1527,13 +1544,13 @@ void Interpreter::LoadCustomCameraMethods ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, CustomCameraLib, 0);
+	luaL_setfuncs(L, CustomCameraLib, 0);
 }
 
 
 void Interpreter::LoadSketchpadAPI ()
 {
-	static const struct luaL_reg skpLib[] = {
+	static const struct luaL_Reg skpLib[] = {
 		{"text", skp_text},
 		{"moveto", skp_moveto},
 		{"lineto", skp_lineto},
@@ -1568,7 +1585,7 @@ void Interpreter::LoadSketchpadAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3); // metatable.__index = metatable
-	luaL_openlib (L, NULL, skpLib, 0);
+	luaL_setfuncs(L, skpLib, 0);
 
 	lua_createtable (L, 0, 8);
 	lua_pushnumber (L, oapi::Sketchpad::BK_OPAQUE);      lua_setfield (L, -2, "OPAQUE");
@@ -1589,7 +1606,7 @@ void Interpreter::LoadSketchpadAPI ()
 
 void Interpreter::LoadAnnotationAPI ()
 {
-	static const struct luaL_reg noteMtd[] = {
+	static const struct luaL_Reg noteMtd[] = {
 		{"set_text", noteSetText},
 		{"set_pos", noteSetPos},
 		{"set_size", noteSetSize},
@@ -1600,12 +1617,12 @@ void Interpreter::LoadAnnotationAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, noteMtd, 0);
+	luaL_setfuncs(L, noteMtd, 0);
 }
 
 void Interpreter::LoadVesselStatusAPI()
 {
-	static const struct luaL_reg vs[] = {
+	static const struct luaL_Reg vs[] = {
 		{"get", vsget},
 		{"set", vsset},
 		{NULL, NULL}
@@ -1614,9 +1631,9 @@ void Interpreter::LoadVesselStatusAPI()
 	lua_pushstring(L, "__index");
 	lua_pushvalue(L, -2); // push metatable
 	lua_settable(L, -3);  // metatable.__index = metatable
-	luaL_openlib(L, NULL, vs, 0);
+	luaL_setfuncs(L, vs, 0);
 
-	static const struct luaL_reg vs2[] = {
+	static const struct luaL_Reg vs2[] = {
 		{"get", vs2get},
 		{"set", vs2set},
 		{NULL, NULL}
@@ -1625,7 +1642,7 @@ void Interpreter::LoadVesselStatusAPI()
 	lua_pushstring(L, "__index");
 	lua_pushvalue(L, -2); // push metatable
 	lua_settable(L, -3);  // metatable.__index = metatable
-	luaL_openlib(L, NULL, vs2, 0);
+	luaL_setfuncs(L, vs2, 0);
 }
 
 void Interpreter::LoadStartupScript ()
@@ -3578,7 +3595,7 @@ coordinates at each frame.
 int Interpreter::oapi_render_hud(lua_State* L)
 {
 	MESHHANDLE hMesh = lua_tomeshhandle(L, 1);
-	int nSurf = lua_objlen(L, 2);
+	int nSurf = lua_rawlen(L, 2);
 	SURFHANDLE *hSurf = new SURFHANDLE[nSurf];
 
 	for ( int i=1 ; i <= nSurf; i++ ) {
@@ -7495,7 +7512,7 @@ int Interpreter::oapi_deflate (lua_State *L)
 	ASSERT_STRING(L, 1);
 
 	const BYTE *ebuf = (BYTE*)lua_tostring(L, 1);
-	DWORD      nebuf = lua_objlen(L, 1);
+	DWORD      nebuf = lua_rawlen(L, 1);
 	BYTE       *zbuf = NULL;
 	DWORD      nzbuf = 0;
 
@@ -7531,7 +7548,7 @@ int Interpreter::oapi_inflate (lua_State *L)
 	ASSERT_STRING(L, 1);
 
 	const BYTE *zbuf = (BYTE*)lua_tostring(L, 1);
-	DWORD      nzbuf = lua_objlen(L, 1);
+	DWORD      nzbuf = lua_rawlen(L, 1);
 	BYTE       *ebuf = NULL;
 	DWORD      nebuf = 0;
 
@@ -7684,7 +7701,7 @@ Vertex arrays.
 NTVERTEX lua_tontvertex(lua_State *L, int idx)
 {
 	int type = lua_type(L, idx);
-	if(type != LUA_TTABLE || lua_objlen(L, idx) != 8) {
+	if(type != LUA_TTABLE || lua_rawlen(L, idx) != 8) {
 		luaL_error(L, "invalid argument for ntvertex creation");
 	}
 	NTVERTEX ret;
@@ -7744,7 +7761,7 @@ int Interpreter::oapi_create_ntvertexarray(lua_State *L)
 	int type = lua_type(L, 1);
 	int nVtx;
 	if(type == LUA_TTABLE) {
-		nVtx = lua_objlen(L,1);
+		nVtx = lua_rawlen(L,1);
 	} else if (type == LUA_TNUMBER) {
 		nVtx = lua_tointeger(L, 1);
 	} else {
@@ -7814,7 +7831,7 @@ int Interpreter::oapi_create_indexarray(lua_State *L)
 	int type = lua_type(L, 1);
 	int nIdx;
 	if(type == LUA_TTABLE) {
-		nIdx = lua_objlen(L,1);
+		nIdx = lua_rawlen(L,1);
 	} else if (type == LUA_TNUMBER) {
 		nIdx = lua_tointeger(L, 1);
 	} else {
@@ -7835,7 +7852,7 @@ int Interpreter::oapi_create_indexarray(lua_State *L)
 		lua_pushnil(L);
 		int i = 0;
 		while (lua_next(L, 1) != 0) {
-			array->idx[i] = luaL_checkint(L, -1);
+			array->idx[i] = luaL_checkinteger(L, -1);
 			lua_pop(L, 1);
 			i++;
 		}
@@ -8275,7 +8292,7 @@ Create a new mesh from a list of mesh group definitions.
 */
 int Interpreter::oapi_create_mesh(lua_State *L)
 {
-	int nGrp = lua_objlen(L, 1);
+	int nGrp = lua_rawlen(L, 1);
 	MESHGROUP *grp = new MESHGROUP[nGrp];
 
 	lua_pushnil(L);
@@ -8321,7 +8338,7 @@ When adding indices to the group, index offsets are added automatically.
 int Interpreter::oapi_add_meshgroupblock(lua_State* L)
 {
 	MESHHANDLE hMesh = lua_tomeshhandle(L, 1);
-	int grpidx = luaL_checkint(L, 2);
+	int grpidx = luaL_checkinteger(L, 2);
 	ntv_data *ntv = (ntv_data *)luaL_checkudata(L, 3, "NTV.vtable");
 	index_data *idx = (index_data *)luaL_checkudata(L, 4, "Index.vtable");
 
@@ -10167,7 +10184,7 @@ int Interpreter::ntv_size (lua_State *L) {
 int Interpreter::ntv_get(lua_State *L) {
 	ntv_data* inst = (ntv_data*)luaL_checkudata(L, 1, "NTV.vtable");
 	if(lua_isnumber(L, 2)) { // return proxy object for vertex
-		int index = luaL_checkint(L, 2);
+		int index = luaL_checkinteger(L, 2);
 		char cbuf[256];
 		if(!(1 <= index && index <= inst->nVtxUsed)) {
 			sprintf(cbuf, "index out of range (%d/%d)", index, inst->nVtxUsed);
@@ -10243,7 +10260,7 @@ To effect modifications, you need to rewrite the modified table into the vertex.
 */
 int Interpreter::ntv_extract(lua_State *L) {
 	ntv_data* inst = (ntv_data*)luaL_checkudata(L, 1, "NTV.vtable");
-    int index = luaL_checkint(L, 2);
+    int index = luaL_checkinteger(L, 2);
     luaL_argcheck(L, 1 <= index && index <= inst->nVtxUsed, 2, "index out of range");
     
     /* return element address */
@@ -10458,7 +10475,7 @@ int Interpreter::ntv_view(lua_State *L) {
 
 int Interpreter::ntv_set(lua_State *L) {
 	ntv_data* inst = (ntv_data*)luaL_checkudata(L, 1, "NTV.vtable");
-    int index = luaL_checkint(L, 2);
+    int index = luaL_checkinteger(L, 2);
     luaL_argcheck(L, 1 <= index && index <= inst->nVtxUsed, 2, "index out of range");
     
     /* return element address */
@@ -10580,7 +10597,7 @@ int Interpreter::idx_append (lua_State *L) {
 int Interpreter::idx_get(lua_State *L) {
 	index_data* inst = (index_data*)luaL_checkudata(L, 1, "Index.vtable");
 	if(lua_isnumber(L, 2)) { // return proxy object for vertex
-		int index = luaL_checkint(L, 2);
+		int index = luaL_checkinteger(L, 2);
 		luaL_argcheck(L, 1 <= index && index <= inst->nIdxUsed, 2, "index out of range");
     
 		/* return element address */
@@ -10605,9 +10622,9 @@ int Interpreter::idx_get(lua_State *L) {
 
 int Interpreter::idx_set(lua_State *L) {
 	index_data* inst = (index_data*)luaL_checkudata(L, 1, "Index.vtable");
-    int index = luaL_checkint(L, 2);
+    int index = luaL_checkinteger(L, 2);
     luaL_argcheck(L, 1 <= index && index <= inst->nIdxUsed, 2, "index out of range");
-    WORD value = luaL_checkint(L, 3);
+    WORD value = luaL_checkinteger(L, 3);
 
 	inst->idx[index - 1] = value;
 	return 0;

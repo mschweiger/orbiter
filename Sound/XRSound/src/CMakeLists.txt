@@ -27,8 +27,9 @@ target_include_directories(XRSound_dll PUBLIC
 
 target_link_libraries(XRSound_dll
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 	${IRRKLANG_LIB}
+	lua::lib
 )
 
 add_dependencies(XRSound_dll
@@ -45,6 +46,8 @@ add_library(XRSound_lib STATIC
 	XRSound.cpp
 	XRSoundImpl.cpp
 )
+
+target_link_libraries(XRSound_lib lua::lib)
 
 set_target_properties(XRSound_lib
 	PROPERTIES

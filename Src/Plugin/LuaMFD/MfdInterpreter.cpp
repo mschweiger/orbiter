@@ -21,7 +21,7 @@ void MFDInterpreter::SetSelf (OBJHANDLE hV)
 	luaL_getmetatable (L, "VESSEL.vtable");  // push metatable
 	lua_setmetatable (L, -2);               // set metatable for user data
 	LoadVesselExtensions (L, *pv);
-	lua_setfield (L, LUA_GLOBALSINDEX, "V");
+	lua_setglobal (L, "V");
 	InitialiseVessel (L, *pv);
 }
 
@@ -29,14 +29,18 @@ void MFDInterpreter::LoadAPI ()
 {
 	Interpreter::LoadAPI();
 
-	static const struct luaL_reg termLib [] = {
+	static const struct luaL_Reg termLib [] = {
 		{"out", termOut},
 		{"clear", termClear},
 		//{"lineup", termLineUp},
 		{"SetVerbosity", termSetVerbosity},
 		{NULL, NULL}
 	};
-	luaL_openlib (L, "term", termLib, 0);
+	luaL_newlib(L, termLib);
+	lua_setglobal(L, "term");
+
+	// Put term back on stack (lua 5.4)
+	lua_getglobal(L, "term");
 
 	// also replace built-in print so it works as expected in the MFD
 	static const struct luaL_Reg printlib[] = {
@@ -44,7 +48,7 @@ void MFDInterpreter::LoadAPI ()
 		{NULL, NULL}
 	};
 	lua_getglobal(L, "_G");
-	luaL_register(L, NULL, printlib);
+	luaL_setfuncs(L, printlib, 0);
 }
 
 void MFDInterpreter::term_strout (const char *str, bool iserr)

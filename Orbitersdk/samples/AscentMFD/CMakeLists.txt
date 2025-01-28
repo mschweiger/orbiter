@@ -16,7 +16,7 @@ add_dependencies(AscentMFD
 
 target_link_libraries(AscentMFD
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 )
 
 target_include_directories(AscentMFD

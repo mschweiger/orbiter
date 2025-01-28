@@ -6,7 +6,10 @@
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/out/install/${presetName}"
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
     },
     {
       "name": "windows-base",
@@ -34,7 +37,8 @@
         "CMAKE_C_COMPILER": "winegcc",
         "CMAKE_CXX_COMPILER": "wineg++",
         "ORBITER_MAKE_DOC": false,
-        "ORBITER_BUILD_D3D9CLIENT": false
+        "ORBITER_BUILD_D3D9CLIENT": false,
+        "ORBITER_BUILD_XRSOUND": false
       },
       "condition": {
         "type": "equals",

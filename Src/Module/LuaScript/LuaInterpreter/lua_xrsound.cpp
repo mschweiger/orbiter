@@ -6,9 +6,11 @@
 #include "Interpreter.h"
 #include "XRSound.h"
 
+#include "lua.h"
+
 void Interpreter::LoadXRSoundAPI ()
 {
-	static const struct luaL_reg xrsoundLib[] = {
+	static const struct luaL_Reg xrsoundLib[] = {
 		{"create_instance", xrsound_create_instance},
 		{"is_present", xrsound_is_present},
 		{"get_version", xrsound_get_version},
@@ -36,7 +38,7 @@ void Interpreter::LoadXRSoundAPI ()
 	lua_pushstring (L, "__index");
 	lua_pushvalue (L, -2); // push metatable
 	lua_settable (L, -3);  // metatable.__index = metatable
-	luaL_openlib (L, NULL, xrsoundLib, 0);
+	luaL_setfuncs(L, xrsoundLib, 0);
 
 	lua_createtable (L, 0, 7);
 	lua_pushnumber (L, (int)XRSound::PlaybackType::InternalOnly); lua_setfield (L, -2, "InternalOnly");

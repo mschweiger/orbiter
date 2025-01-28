@@ -21,6 +21,7 @@ target_link_libraries(LuaInterpreter
 	${ORBITER_LIB}
 	${ORBITER_SDK_LIB}
 	lua::lib
+	lua::lfs
 )
 
 add_dependencies(LuaInterpreter
@@ -54,10 +55,14 @@ add_custom_command(TARGET LuaInterpreter
 
 if(ORBITER_MAKE_DOC)
 file(GLOB lua_in *.h *.cpp *.ld *.md *.lua)
+
 add_custom_command(
 	POST_BUILD
-	DEPENDS ${lua_in} lfs CopyLDoc
+	DEPENDS ${lua_in} CopyLDoc
 	OUTPUT ${BUILD_OUT_DIR}/index.html
+	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lua::exe> ${CMAKE_BINARY_DIR}
+	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lua::lib> ${CMAKE_BINARY_DIR}
+	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:lua::lfs> ${CMAKE_BINARY_DIR}
 	COMMAND ${CMAKE_COMMAND} -E copy ${lua_in} ${CMAKE_CURRENT_BINARY_DIR}
 	COMMAND ${ldoc} .
 	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/interpreter.hhp ${BUILD_OUT_DIR}

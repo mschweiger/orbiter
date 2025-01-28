@@ -19,6 +19,7 @@ target_include_directories(Vsop87
 
 target_link_libraries(Vsop87
 	${ORBITER_LIB}
+	${ORBITER_SDK_LIB}
 )
 
 set(VSOP87_LIB $<TARGET_LINKER_FILE:Vsop87>)

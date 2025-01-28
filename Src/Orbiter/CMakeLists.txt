@@ -1,5 +1,6 @@
 # Copyright (c) Martin Schweiger
 # Licensed under the MIT License
+find_package(ZLIB REQUIRED)
 
 # SAFESEH linker flag must be turned off because the DX7 libraries don't support it'
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -SAFESEH:NO")
@@ -135,7 +136,8 @@ set(Orbiter_common_libs
 	UxTheme.lib
 	version.lib
 	${HTML_HELP_LIBRARY}
-	zlib
+	ZLIB::ZLIB
+	lua::lib
 	${HTMLHELP_LIB}
 	$<TARGET_FILE:Orbitersdk>
 	$<TARGET_FILE:DlgCtrl>

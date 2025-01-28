@@ -180,6 +180,7 @@ target_link_directories(D3D9Client PUBLIC
 )
 
 target_link_libraries(D3D9Client
+    lua::lib
 	orbiter.lib
 	orbitersdk.lib
 	d3d9.lib

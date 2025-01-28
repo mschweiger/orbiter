@@ -15,7 +15,7 @@ target_include_directories(LaunchpadParamTemplate
 
 target_link_libraries(LaunchpadParamTemplate
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 )
 
 add_dependencies(LaunchpadParamTemplate

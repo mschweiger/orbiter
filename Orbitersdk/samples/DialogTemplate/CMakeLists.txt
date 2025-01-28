@@ -15,7 +15,7 @@ target_include_directories(DialogTemplate
 
 target_link_libraries(DialogTemplate
 	${ORBITER_LIB}
-	${ORBITER_SDK_LIB}
+	Orbitersdk
 )
 
 add_dependencies(DialogTemplate

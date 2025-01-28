@@ -55,7 +55,7 @@ target_link_libraries(tileedit
 	Qt5::Widgets
 	Qt5::Core
 	Qt5::Gui
-	${CMAKE_CURRENT_SOURCE_DIR}/../extern/zlib/lib/zlib.lib
+	ZLIB::ZLIB
 	${CMAKE_CURRENT_SOURCE_DIR}/../extern/libpng/lib/libpng16_static.lib
 	${FASTDXT_LIB}
 )
