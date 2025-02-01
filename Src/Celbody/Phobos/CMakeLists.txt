@@ -27,7 +27,7 @@ set_target_properties(${CELBODY}
 	PROPERTIES
 	FOLDER Celbody
 )
-
+if(NOT CMAKE_CL_64) #remove me when this celbody has source code that can be built
 # Installation
 install(PROGRAMS
 	${CELBODY}.dll
@@ -36,3 +36,4 @@ install(PROGRAMS
 install(DIRECTORY Config
 	DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
 )
+endif()
